@@ -1,0 +1,24 @@
+2026/09/10-17:12:24.504 2c558ce Reusing MANIFEST /Users/sourav/Desktop/work/wingo-automation/user-data/Default/IndexedDB/https_bdg2030.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/09/10-17:12:24.504 2c558ce Recovering log #6
+2026/09/10-17:12:24.504 2c558ce Reusing old log /Users/sourav/Desktop/work/wingo-automation/user-data/Default/IndexedDB/https_bdg2030.com_0.indexeddb.leveldb/000006.log 
+2026/09/10-17:12:24.518 2c558d1 Level-0 table #10: started
+2026/09/10-17:12:24.519 2c558d1 Level-0 table #10: 3424 bytes OK
+2026/09/10-17:12:24.520 2c558d1 Delete type=0 #6
+2026/09/10-17:12:24.520 2c558ce Manual compaction at level-0 from '\x00\x07\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x08\x00\x00\x00' @ 0 : 0; will stop at '\x00\x07\x00\x00\x05' @ 289 : 1
+2026/09/10-17:12:24.520 2c558ce Compacting 1@0 + 1@1 files
+2026/09/10-17:12:24.522 2c558ce Generated table #11@0: 88 keys, 2457 bytes
+2026/09/10-17:12:24.522 2c558ce Compacted 1@0 + 1@1 files => 2457 bytes
+2026/09/10-17:12:24.522 2c558ce compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/09/10-17:12:24.523 2c558ce Delete type=2 #10
+2026/09/10-17:12:24.523 2c558ce Manual compaction at level-0 from '\x00\x07\x00\x00\x05' @ 289 : 1 .. '\x00\x08\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/09/10-17:12:24.555 2c558d1 Level-0 table #13: started
+2026/09/10-17:12:24.557 2c558d1 Level-0 table #13: 2053 bytes OK
+2026/09/10-17:12:24.558 2c558d1 Delete type=2 #7
+2026/09/10-17:12:24.558 2c558d1 Delete type=0 #9
+2026/09/10-17:12:24.558 2c558ce Manual compaction at level-0 from '\x00\x08\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x09\x00\x00\x00' @ 0 : 0; will stop at '\x00\x08\x00\x00\x05' @ 332 : 1
+2026/09/10-17:12:24.558 2c558ce Compacting 1@0 + 1@1 files
+2026/09/10-17:12:24.559 2c558ce Generated table #14@0: 98 keys, 2570 bytes
+2026/09/10-17:12:24.559 2c558ce Compacted 1@0 + 1@1 files => 2570 bytes
+2026/09/10-17:12:24.559 2c558ce compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/09/10-17:12:24.559 2c558ce Delete type=2 #13
+2026/09/10-17:12:24.560 2c558ce Manual compaction at level-0 from '\x00\x08\x00\x00\x05' @ 332 : 1 .. '\x00\x09\x00\x00\x00' @ 0 : 0; will stop at (end)
