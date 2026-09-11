@@ -10,8 +10,8 @@ chromium.use(stealth);
 
 // ========================= FIXED CONFIG =========================
 const CREDENTIALS = {
-  PHONE: "9056822671",
-  PASSWORD: "Sourav123",
+  PHONE: process.env.WINGO_PHONE || "9056822671",
+  PASSWORD: process.env.WINGO_PASSWORD || "Sourav123",
 };
 const API_BASE = "https://wingo.yl.n3y.in";
 const WS_URL = "wss://wingo.yl.n3y.in/api/ws?timer=30S";
@@ -19,23 +19,23 @@ const TIMER = "30S";
 // =================================================================
 
 // ========================= HOT-RELOAD ============================
-const STRATEGY_PATH = path.resolve(__dirname, "strategy.js");
+const STRATEGY_PATH = path.resolve(__dirname, "backend-strategy.json");
 
 function loadStrategy() {
   // Clear the cached module so require() re-reads the file
-  delete require.cache[require.resolve("./strategy")];
+  delete require.cache[require.resolve("./backend-strategy.json")];
   try {
-    const s = require("./strategy");
+    const s = require("./backend-strategy.json");
     return s;
   } catch (err) {
-    log(`⚠️  Error loading strategy.js: ${err.message}`);
+    log(`⚠️  Error loading backend-strategy.json: ${err.message}`);
     return null;
   }
 }
 
 let strategy = loadStrategy();
 
-// Watch strategy.js for changes and hot-reload
+// Watch strategy.json for changes and hot-reload
 fs.watch(STRATEGY_PATH, (eventType) => {
   if (eventType === "change") {
     const prev = JSON.stringify(strategy);
@@ -44,11 +44,10 @@ fs.watch(STRATEGY_PATH, (eventType) => {
       strategy = next;
       const curr = JSON.stringify(strategy);
       if (prev !== curr) {
-        log("🔄 strategy.js changed — hot-reloaded!");
+        log("🔄 backend-strategy.json changed — hot-reloaded!");
         log(`   BET_BIG_SMALL: ${strategy.BET_BIG_SMALL ? "ON ✅" : "OFF ❌"}`);
         log(`   BET_RED_GREEN: ${strategy.BET_RED_GREEN ? "ON ✅" : "OFF ❌"}`);
         log(`   ALLOWED_QUALITIES: [${strategy.ALLOWED_QUALITIES.join(", ")}]`);
-        log(`   Quantity:   ${strategy.BET_QUANTITY || "Formula 2^(level-1)"}`);
       }
     }
   }
@@ -96,19 +95,13 @@ function getBetQuantity(level) {
 
 /**
  * Place a bet by clicking the prediction button, setting quantity, and confirming.
- *
- * Popup structure:
- *   .lottery-container
- *     .amount-section  →  Balance buttons: 1, 10, 100, 1000
- *     .multiplier-section  →  Quantity: -, input, +  |  Multiplier: X1..X100
- *     .footer  →  Cancel | Total amount ₹X.XX
  */
 async function placeBet(page, selector, label, level) {
   try {
     const quantity = getBetQuantity(level);
     log(`  Clicking ${label} button (Level ${level}, Qty ${quantity})...`);
 
-    // Step 1: Click the bet button (Big/Small/Red/Green/Violet)
+    // Step 1: Click the bet button
     const btn = page.locator(selector).first();
     try {
       await btn.click({ timeout: 2000 });
@@ -128,7 +121,7 @@ async function placeBet(page, selector, label, level) {
       await page.evaluate((qty) => {
         const input = document.querySelector('.multiplier-section input[type="number"]');
         if (input) {
-          // Use native setter to bypass Vue's getter/setter
+          // Use native setter
           const nativeSetter = Object.getOwnPropertyDescriptor(
             window.HTMLInputElement.prototype, 'value'
           ).set;
@@ -142,7 +135,7 @@ async function placeBet(page, selector, label, level) {
       await page.waitForTimeout(500);
     }
 
-    // Step 4: Click the "Total amount" confirm button inside the popup
+    // Step 4: Click the "Total amount" confirm button
     log(`  Confirming bet...`);
     const confirmBtn = popup.locator('button.bet-amount');
     await confirmBtn.waitFor({ state: 'visible', timeout: 3000 });
@@ -160,7 +153,7 @@ async function placeBet(page, selector, label, level) {
 /**
  * Handle a new round: fetch prediction and place bets
  */
-let isBetting = false; // Prevent double-betting from overlapping WS messages
+let isBetting = false; // Prevent double-betting
 
 async function onNewRound(page) {
   if (isBetting) {
@@ -173,7 +166,7 @@ async function onNewRound(page) {
     log("🔔 New round detected! Fetching prediction...");
     const apiState = await fetchPrediction();
     const pending = apiState.pending;
-    const engineState = apiState.state; // Contains bsLevel, rgLevel (numeric!)
+    const engineState = apiState.state; 
 
     if (!pending) {
       log("⚠️  No pending prediction available. Skipping this round.");
@@ -233,7 +226,7 @@ async function onNewRound(page) {
 }
 
 /**
- * Connect to prediction WebSocket with auto-reconnect
+ * Connect to prediction WebSocket
  */
 function connectWebSocket(page) {
   log("🔌 Connecting to prediction WebSocket...");
@@ -248,7 +241,6 @@ function connectWebSocket(page) {
       const msg = JSON.parse(data.toString());
       if (msg.type === "new_result") {
         log(`📨 WS: new_result for issue ${msg.issue}`);
-        // Small delay to let the website UI update for the new round
         await page.waitForTimeout(2000);
         await onNewRound(page);
       }
@@ -272,7 +264,8 @@ function connectWebSocket(page) {
 // ========================= MAIN =========================
 (async () => {
   log("Starting Wingo bot...");
-  const userDataDir = "./user-data";
+  // Use a separate user-data dir for the backend bot to avoid conflicts
+  const userDataDir = "./backend-user-data";
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -292,9 +285,7 @@ function connectWebSocket(page) {
       }
     } catch (err) {}
     try {
-      const dismissBtn = page
-        .locator('text="Don\'t log in yet, continue browsing"')
-        .first();
+      const dismissBtn = page.locator('text="Don\'t log in yet, continue browsing"').first();
       if (await dismissBtn.isVisible({ timeout: 1000 })) {
         await dismissBtn.click();
         log("Dismissed Event Rewards popup.");
@@ -302,9 +293,7 @@ function connectWebSocket(page) {
       }
     } catch (err) {}
     try {
-      const firstRechargeClose = page
-        .locator(".first-recharge-queue-dialog__close")
-        .first();
+      const firstRechargeClose = page.locator(".first-recharge-queue-dialog__close").first();
       if (await firstRechargeClose.isVisible({ timeout: 1000 })) {
         await firstRechargeClose.click();
         log("Closed First Deposit Bonus popup.");
@@ -333,9 +322,7 @@ function connectWebSocket(page) {
 
   log("Submitting login...");
   try {
-    const loginBtn = page
-      .locator('text=/log\\s*in/i, text=/sign\\s*in/i, button:visible')
-      .first();
+    const loginBtn = page.locator('text=/log\\s*in/i, text=/sign\\s*in/i, button:visible').first();
     await loginBtn.click({ timeout: 2000 });
   } catch (err) {
     await page.press('input[placeholder="Password"]', "Enter");
@@ -344,7 +331,6 @@ function connectWebSocket(page) {
   log("Waiting for login response...");
   await page.waitForTimeout(5000);
 
-  // Close popups after login
   await closePopups();
   await page.waitForTimeout(1000);
   await closePopups();
@@ -352,10 +338,7 @@ function connectWebSocket(page) {
   // ---- Navigate to Win Go 30s ----
   log("Clicking on 'Win Go 30s' card...");
   try {
-    const winGoCard = page
-      .locator(".lotterySlotItem")
-      .filter({ hasText: "Win Go 30s" })
-      .first();
+    const winGoCard = page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
     await winGoCard.click({ timeout: 5000 });
     log("Clicked 'Win Go 30s'.");
   } catch (err) {
@@ -367,16 +350,6 @@ function connectWebSocket(page) {
 
   await page.screenshot({ path: "ready-to-bet.png" });
   log("✅ Bot is ready on the Win Go 30s page!");
-
-  // ---- Print strategy ----
-  log("========================================");
-  log("  BETTING STRATEGY (hot-reloadable)");
-  log(`  Big/Small:  ${strategy.BET_BIG_SMALL ? "ON ✅" : "OFF ❌"}`);
-  log(`  Red/Green:  ${strategy.BET_RED_GREEN ? "ON ✅" : "OFF ❌"}`);
-  log(`  Qualities:  [${strategy.ALLOWED_QUALITIES.join(", ")}]`);
-  log(`  Quantity:   ${strategy.BET_QUANTITY || "Formula 2^(level-1)"}`);
-  log("  📝 Edit strategy.js to change — auto-reloads!");
-  log("========================================");
 
   // ---- Connect to prediction engine ----
   connectWebSocket(page);

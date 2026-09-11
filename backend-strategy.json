@@ -1,0 +1,10 @@
+{
+  "BET_BIG_SMALL": true,
+  "BET_RED_GREEN": true,
+  "ALLOWED_QUALITIES": [
+    "A",
+    "B"
+  ],
+  "BET_TABLE": null,
+  "MAX_LEVEL": 12
+}
