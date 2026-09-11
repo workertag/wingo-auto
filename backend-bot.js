@@ -89,8 +89,9 @@ function getBetQuantity(level) {
   if (s.BET_TABLE && s.BET_TABLE[level] !== undefined) {
     return s.BET_TABLE[level];
   }
-  // Default formula: 2^(level-1)
-  return Math.pow(2, (level || 1) - 1);
+  // Default formula: Base Bet * 2^(level-1)
+  const baseBet = s.BASE_BET || 1;
+  return baseBet * Math.pow(2, (level || 1) - 1);
 }
 
 /**
@@ -188,6 +189,8 @@ async function onNewRound(page) {
     if (s.BET_BIG_SMALL && pending.bsPred) {
       if (bsLevel > (s.MAX_LEVEL || 12)) {
         log(`   🛑 Skipping BS bet — Level ${bsLevel} exceeds MAX_LEVEL ${s.MAX_LEVEL || 12}`);
+      } else if (bsLevel < (s.MIN_LEVEL || 1)) {
+        log(`   🛑 Skipping BS bet — Level ${bsLevel} is below MIN_LEVEL ${s.MIN_LEVEL || 1}`);
       } else if (s.ALLOWED_QUALITIES.includes(pending.bsQuality)) {
         const selector =
           pending.bsPred === "BIG"
@@ -203,6 +206,8 @@ async function onNewRound(page) {
     if (s.BET_RED_GREEN && pending.rgPred) {
       if (rgLevel > (s.MAX_LEVEL || 12)) {
         log(`   🛑 Skipping RG bet — Level ${rgLevel} exceeds MAX_LEVEL ${s.MAX_LEVEL || 12}`);
+      } else if (rgLevel < (s.MIN_LEVEL || 1)) {
+        log(`   🛑 Skipping RG bet — Level ${rgLevel} is below MIN_LEVEL ${s.MIN_LEVEL || 1}`);
       } else if (s.ALLOWED_QUALITIES.includes(pending.rgQuality)) {
         let selector;
         switch (pending.rgPred) {

@@ -27,8 +27,10 @@ function Dashboard() {
   const [form, setForm] = useState({
     phone: '',
     password: '',
+    baseBet: 1,
     betBigSmall: true,
     betRedGreen: true,
+    minLevel: 1,
     maxLevel: 12,
   });
 
@@ -46,8 +48,10 @@ function Dashboard() {
         setForm({
           phone: settingsReq.credentials.phone || '',
           password: settingsReq.credentials.password || '',
+          baseBet: settingsReq.strategy.BASE_BET ?? 1,
           betBigSmall: settingsReq.strategy.BET_BIG_SMALL ?? true,
           betRedGreen: settingsReq.strategy.BET_RED_GREEN ?? true,
+          minLevel: settingsReq.strategy.MIN_LEVEL ?? 1,
           maxLevel: settingsReq.strategy.MAX_LEVEL ?? 12,
         });
       } catch (err) {
@@ -115,10 +119,12 @@ function Dashboard() {
           password: form.password
         },
         strategy: {
+          BASE_BET: form.baseBet,
           BET_BIG_SMALL: form.betBigSmall,
           BET_RED_GREEN: form.betRedGreen,
           ALLOWED_QUALITIES: ["A", "B"],
           BET_TABLE: null,
+          MIN_LEVEL: form.minLevel,
           MAX_LEVEL: form.maxLevel
         }
       });
@@ -228,15 +234,35 @@ function Dashboard() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Base Bet (Level 1)</label>
+                    <input 
+                      type="number" 
+                      value={form.baseBet}
+                      onChange={e => setForm({...form, baseBet: parseInt(e.target.value) || 1})}
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Start / Min Level</label>
+                    <input 
+                      type="number" 
+                      value={form.minLevel}
+                      onChange={e => setForm({...form, minLevel: parseInt(e.target.value) || 1})}
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Max Martingale Level</label>
+                  <label className="block text-xs text-slate-500 mb-1">Max Level</label>
                   <input 
                     type="number" 
                     value={form.maxLevel}
                     onChange={e => setForm({...form, maxLevel: parseInt(e.target.value) || 12})}
                     className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">Bot will skip bets if layer exceeds this number.</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Bot uses Martingale (Base * 2^(Level-1)). Bets are skipped if layer is below Min or above Max.</p>
                 </div>
               </div>
 
