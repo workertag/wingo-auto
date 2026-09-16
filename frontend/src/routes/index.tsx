@@ -2,7 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { api } from '../lib/api';
-import { Play, Square, Settings, Terminal, Shield, LogOut, Check, TrendingUp, TrendingDown, Activity, History, Plus, Trash2 } from 'lucide-react';
+import { Play, Square, Settings, Terminal, Shield, LogOut, Check, TrendingUp, TrendingDown, Activity, History, Plus, Trash2, Save } from 'lucide-react';
 import { AppLayout } from '../components/Layout';
 
 export const Route = createFileRoute('/')({
@@ -27,6 +27,8 @@ function Dashboard() {
     history: [] as any[]
   });
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -117,6 +119,36 @@ function Dashboard() {
       }
     } catch (err: any) {
       alert(err.message);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSaving(true);
+    try {
+      await api.updateSettings({
+        credentials: {
+          phone: form.phone,
+          password: form.password
+        }
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGlobalOptionsChange = async (key: string, value: boolean) => {
+    const newOptions = { ...globalOptions, [key]: value };
+    setGlobalOptions(newOptions);
+    if (isRunning) {
+        try {
+            await api.updateBotOptions(newOptions);
+        } catch(err) {
+            console.error(err);
+        }
     }
   };
 
@@ -220,9 +252,21 @@ function Dashboard() {
             
             <div className="space-y-5">
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-400 flex items-center uppercase tracking-wider">
-                  <Shield className="w-4 h-4 mr-2" /> Wingo Account
-                </h3>
+                <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-semibold text-slate-400 flex items-center uppercase tracking-wider">
+                    <Shield className="w-4 h-4 mr-2" /> Wingo Account
+                    </h3>
+                    {!isRunning && (
+                        <button 
+                            onClick={handleSaveSettings}
+                            disabled={saving}
+                            className="text-xs flex items-center space-x-1 px-3 py-1.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors border border-blue-500/20 disabled:opacity-50"
+                        >
+                            {saved ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+                            <span>{saving ? 'Saving...' : saved ? 'Saved!' : 'Save'}</span>
+                        </button>
+                    )}
+                </div>
                 {isRunning ? (
                   <div className="bg-slate-950/50 border border-slate-700 rounded-xl p-5 flex flex-col items-center justify-center space-y-1 shadow-inner relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[40px] pointer-events-none" />
@@ -238,8 +282,17 @@ function Dashboard() {
                       <input 
                         type="text" 
                         value={form.phone}
-                        disabled
-                        className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 opacity-50 cursor-not-allowed"
+                        onChange={e => setForm({...form, phone: e.target.value})}
+                        className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Password</label>
+                      <input 
+                        type="password" 
+                        value={form.password}
+                        onChange={e => setForm({...form, password: e.target.value})}
+                        className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                       />
                     </div>
                   </>
@@ -251,28 +304,26 @@ function Dashboard() {
                     <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Run Options</h3>
                 </div>
 
-                {!isRunning && (
-                    <div className="flex flex-col space-y-3 p-3 bg-slate-950/50 rounded-xl border border-slate-800">
-                        <label className="flex items-center space-x-3">
-                            <input 
-                                type="checkbox" 
-                                checked={globalOptions.playBigSmall}
-                                onChange={e => setGlobalOptions({...globalOptions, playBigSmall: e.target.checked})}
-                                className="w-4 h-4 rounded text-blue-500 bg-slate-900 border-slate-700 focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-slate-300">Play Big / Small</span>
-                        </label>
-                        <label className="flex items-center space-x-3">
-                            <input 
-                                type="checkbox" 
-                                checked={globalOptions.playRedGreen}
-                                onChange={e => setGlobalOptions({...globalOptions, playRedGreen: e.target.checked})}
-                                className="w-4 h-4 rounded text-blue-500 bg-slate-900 border-slate-700 focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-slate-300">Play Red / Green / Violet</span>
-                        </label>
-                    </div>
-                )}
+                <div className="flex flex-col space-y-3 p-3 bg-slate-950/50 rounded-xl border border-slate-800">
+                    <label className="flex items-center space-x-3">
+                        <input 
+                            type="checkbox" 
+                            checked={globalOptions.playBigSmall}
+                            onChange={e => handleGlobalOptionsChange('playBigSmall', e.target.checked)}
+                            className="w-4 h-4 rounded text-blue-500 bg-slate-900 border-slate-700 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-slate-300">Play Big / Small</span>
+                    </label>
+                    <label className="flex items-center space-x-3">
+                        <input 
+                            type="checkbox" 
+                            checked={globalOptions.playRedGreen}
+                            onChange={e => handleGlobalOptionsChange('playRedGreen', e.target.checked)}
+                            className="w-4 h-4 rounded text-blue-500 bg-slate-900 border-slate-700 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-slate-300">Play Red / Green / Violet</span>
+                    </label>
+                </div>
 
                 <div className="space-y-3">
                     <div className="flex justify-between items-center mt-2">

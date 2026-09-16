@@ -62,6 +62,15 @@ function log(msg) {
   console.log(`[${ts}] ${msg}`);
 }
 
+if (process.send) {
+  process.on('message', (msg) => {
+    if (msg.type === 'UPDATE_OPTIONS') {
+      globalOptions = { ...globalOptions, ...msg.data };
+      log("🔄 Live updated global options: " + JSON.stringify(msg.data));
+    }
+  });
+}
+
 let pendingBets = [];
 
 async function checkActiveSchedule() {

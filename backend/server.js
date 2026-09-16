@@ -294,6 +294,13 @@ app.post('/api/bot/stop', authenticateToken, (req, res) => {
   res.json({ success: true, message: 'Stop signal sent' });
 });
 
+app.post('/api/bot/options', authenticateToken, (req, res) => {
+  if (botProcess) {
+    botProcess.send({ type: 'UPDATE_OPTIONS', data: req.body });
+  }
+  res.json({ success: true });
+});
+
 app.get('/api/bot/logs', authenticateToken, (req, res) => {
   res.json({ logs: botLogs });
 });

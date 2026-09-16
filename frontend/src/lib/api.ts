@@ -68,6 +68,13 @@ export const api = {
     return this.request('/bot/stop', { method: 'POST' });
   },
 
+  updateBotOptions(options: any) {
+    return this.request('/bot/options', {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  },
+
   getBotLogs() {
     return this.request('/bot/logs');
   },
