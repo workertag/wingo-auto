@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = '/api';
 
 export const api = {
   getToken: () => localStorage.getItem('dashboard_token'),
@@ -57,8 +57,11 @@ export const api = {
     return this.request('/bot/status');
   },
 
-  startBot() {
-    return this.request('/bot/start', { method: 'POST' });
+  startBot(data?: any) {
+    return this.request('/bot/start', {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
   },
 
   stopBot() {
@@ -68,4 +71,40 @@ export const api = {
   getBotLogs() {
     return this.request('/bot/logs');
   },
+
+  getBotStats() {
+    return this.request('/bot/stats');
+  },
+
+  getBotSessions() {
+    return this.request('/bot-sessions');
+  },
+
+  // Time Slots
+  getTimeSlots() {
+    return this.request('/time-slots');
+  },
+  createTimeSlot(data: any) {
+    return this.request('/time-slots', { method: 'POST', body: JSON.stringify(data) });
+  },
+  updateTimeSlot(id: string, data: any) {
+    return this.request(`/time-slots/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  },
+  deleteTimeSlot(id: string) {
+    return this.request(`/time-slots/${id}`, { method: 'DELETE' });
+  },
+
+  // Strategies
+  getStrategies() {
+    return this.request('/strategies');
+  },
+  createStrategy(data: any) {
+    return this.request('/strategies', { method: 'POST', body: JSON.stringify(data) });
+  },
+  updateStrategy(id: string, data: any) {
+    return this.request(`/strategies/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  },
+  deleteStrategy(id: string) {
+    return this.request(`/strategies/${id}`, { method: 'DELETE' });
+  }
 };

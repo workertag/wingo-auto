@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model TimeSlot {
+  id        String   @id @default(uuid())
+  name      String
+  startTime String   // Format: "HH:mm" (24-hour)
+  endTime   String   // Format: "HH:mm" (24-hour)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Strategy {
+  id         String   @id @default(uuid())
+  name       String
+  minLevel   Int      @default(1)
+  maxLevel   Int      @default(7)
+  maxWins    Int?
+  maxLosses  Int?
+  levels     Int[]    // Array of bet amounts for each level
+  config     Json     // e.g. { "BET_BIG_SMALL": true, "ALLOWED_QUALITIES": ["A", "B"] }
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model BotSession {
+  id             String   @id @default(uuid())
+  date           String   // e.g. "2026-09-16"
+  timeSlotId     String?
+  timeSlotName   String?
+  strategyId     String?
+  strategyName   String?
+  initialBalance Float?
+  finalBalance   Float?
+  totalWins      Int      @default(0)
+  totalLosses    Int      @default(0)
+  status         String   // ACTIVE, COMPLETED, STOP_LOSS, TAKE_PROFIT
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+

@@ -56,7 +56,7 @@ fs.watch(STRATEGY_PATH, (eventType) => {
 // =================================================================
 
 function log(msg) {
-  const ts = new Date().toISOString();
+  const ts = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }) + " IST";
   console.log(`[${ts}] ${msg}`);
 }
 

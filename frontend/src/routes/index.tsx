@@ -2,7 +2,8 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { api } from '../lib/api';
-import { Play, Square, Settings, Terminal, Shield, LogOut, Check } from 'lucide-react';
+import { Play, Square, Settings, Terminal, Shield, LogOut, Check, TrendingUp, TrendingDown, Activity, History, Plus, Trash2 } from 'lucide-react';
+import { AppLayout } from '../components/Layout';
 
 export const Route = createFileRoute('/')({
   beforeLoad: () => {
@@ -18,41 +19,52 @@ function Dashboard() {
   
   const [isRunning, setIsRunning] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
+  const [stats, setStats] = useState({
+    totalWins: 0,
+    totalLosses: 0,
+    totalEarned: 0,
+    currentBalance: null as number | null,
+    history: [] as any[]
+  });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState({
     phone: '',
     password: '',
-    baseBet: 1,
-    betBigSmall: true,
-    betRedGreen: true,
-    minLevel: 1,
-    maxLevel: 12,
   });
 
-  // Fetch initial state
+  const [strategies, setStrategies] = useState<any[]>([]);
+  const [timeSlots, setTimeSlots] = useState<any[]>([]);
+  
+  const [schedules, setSchedules] = useState<{ id: number; timeSlotId: string; strategyId: string }[]>([]);
+  const [globalOptions, setGlobalOptions] = useState({
+    playBigSmall: true,
+    playRedGreen: true
+  });
+
   useEffect(() => {
     const init = async () => {
       try {
-        const [statusReq, settingsReq] = await Promise.all([
+        const [statusReq, settingsReq, stratsReq, timeSlotsReq] = await Promise.all([
           api.getBotStatus(),
-          api.getSettings()
+          api.getSettings(),
+          api.getStrategies(),
+          api.getTimeSlots()
         ]);
         
         setIsRunning(statusReq.running);
+        setStrategies(stratsReq);
+        setTimeSlots(timeSlotsReq);
+        
+        if (stratsReq.length > 0 && timeSlotsReq.length > 0) {
+           setSchedules([{ id: Date.now(), timeSlotId: timeSlotsReq[0].id, strategyId: stratsReq[0].id }]);
+        }
         
         setForm({
-          phone: settingsReq.credentials.phone || '',
-          password: settingsReq.credentials.password || '',
-          baseBet: settingsReq.strategy.BASE_BET ?? 1,
-          betBigSmall: settingsReq.strategy.BET_BIG_SMALL ?? true,
-          betRedGreen: settingsReq.strategy.BET_RED_GREEN ?? true,
-          minLevel: settingsReq.strategy.MIN_LEVEL ?? 1,
-          maxLevel: settingsReq.strategy.MAX_LEVEL ?? 12,
+          phone: settingsReq.credentials?.phone || '',
+          password: settingsReq.credentials?.password || '',
         });
       } catch (err) {
         console.error(err);
@@ -63,35 +75,33 @@ function Dashboard() {
     init();
   }, []);
 
-  // Poll for logs and status if running
   useEffect(() => {
     let interval: any;
     
     const poll = async () => {
       try {
-        const [logsReq, statusReq] = await Promise.all([
+        const [logsReq, statusReq, statsReq] = await Promise.all([
           api.getBotLogs(),
-          api.getBotStatus()
+          api.getBotStatus(),
+          api.getBotStats()
         ]);
         setLogs(logsReq.logs);
         setIsRunning(statusReq.running);
+        setStats(statsReq);
       } catch (err) {
-        // Silently fail polling
       }
     };
 
     if (isRunning) {
-      poll(); // Immediate poll
+      poll();
       interval = setInterval(poll, 2000);
     } else {
-      // Just one final poll to get the exit message
       poll();
     }
     
     return () => clearInterval(interval);
   }, [isRunning]);
 
-  // Auto-scroll logs
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
@@ -102,7 +112,7 @@ function Dashboard() {
         await api.stopBot();
         setIsRunning(false);
       } else {
-        await api.startBot();
+        await api.startBot({ schedules, globalOptions });
         setIsRunning(true);
       }
     } catch (err: any) {
@@ -110,31 +120,16 @@ function Dashboard() {
     }
   };
 
-  const handleSaveSettings = async () => {
-    setSaving(true);
-    try {
-      await api.updateSettings({
-        credentials: {
-          phone: form.phone,
-          password: form.password
-        },
-        strategy: {
-          BASE_BET: form.baseBet,
-          BET_BIG_SMALL: form.betBigSmall,
-          BET_RED_GREEN: form.betRedGreen,
-          ALLOWED_QUALITIES: ["A", "B"],
-          BET_TABLE: null,
-          MIN_LEVEL: form.minLevel,
-          MAX_LEVEL: form.maxLevel
-        }
-      });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setSaving(false);
-    }
+  const handleAddSchedule = () => {
+      setSchedules([...schedules, { id: Date.now(), timeSlotId: timeSlots[0]?.id || '', strategyId: strategies[0]?.id || '' }]);
+  };
+
+  const handleRemoveSchedule = (id: number) => {
+      setSchedules(schedules.filter(s => s.id !== id));
+  };
+
+  const handleScheduleChange = (id: number, field: string, value: string) => {
+      setSchedules(schedules.map(s => s.id === id ? { ...s, [field]: value } : s));
   };
 
   if (loading) {
@@ -142,10 +137,10 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-300 font-sans p-4 sm:p-8">
+    <AppLayout>
+      <div className="min-h-screen bg-transparent text-slate-300 font-sans p-4 sm:p-8">
       <div className="max-w-6xl mx-auto space-y-8 relative z-10">
         
-        {/* Header */}
         <header className="flex justify-between items-center bg-slate-900/50 p-6 rounded-2xl border border-slate-800 backdrop-blur-md">
           <div className="flex items-center space-x-4">
             <div className={`h-12 w-12 rounded-xl flex items-center justify-center border transition-colors ${isRunning ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-slate-800/50 border-slate-700 text-slate-500'}`}>
@@ -181,9 +176,42 @@ function Dashboard() {
           </div>
         </header>
 
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex items-center justify-between backdrop-blur-md shadow-lg">
+            <div>
+              <p className="text-sm font-medium text-slate-400 mb-1">Total Wins</p>
+              <h3 className="text-3xl font-bold text-emerald-400">{stats.totalWins}</h3>
+            </div>
+            <div className="h-12 w-12 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+              <TrendingUp className="w-6 h-6" />
+            </div>
+          </div>
+          
+          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex items-center justify-between backdrop-blur-md shadow-lg">
+            <div>
+              <p className="text-sm font-medium text-slate-400 mb-1">Total Losses</p>
+              <h3 className="text-3xl font-bold text-red-400">{stats.totalLosses}</h3>
+            </div>
+            <div className="h-12 w-12 rounded-xl bg-red-500/10 flex items-center justify-center border border-red-500/20 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.15)]">
+              <TrendingDown className="w-6 h-6" />
+            </div>
+          </div>
+
+          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex items-center justify-between backdrop-blur-md shadow-lg">
+            <div>
+              <p className="text-sm font-medium text-slate-400 mb-1">Total Earned (₹)</p>
+              <h3 className={`text-3xl font-bold ${stats.totalEarned >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                {stats.totalEarned > 0 ? '+' : ''}{stats.totalEarned.toFixed(2)}
+              </h3>
+            </div>
+            <div className="h-12 w-12 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 text-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.15)]">
+              <Activity className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* Settings Panel */}
           <div className="bg-slate-900/50 rounded-2xl border border-slate-800 p-6 backdrop-blur-md h-fit">
             <div className="flex items-center space-x-3 mb-6 border-b border-slate-800 pb-4">
               <Settings className="w-5 h-5 text-blue-400" />
@@ -191,124 +219,161 @@ function Dashboard() {
             </div>
             
             <div className="space-y-5">
-              {/* Credentials */}
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold text-slate-400 flex items-center uppercase tracking-wider">
                   <Shield className="w-4 h-4 mr-2" /> Wingo Account
                 </h3>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Phone Number</label>
-                  <input 
-                    type="text" 
-                    value={form.phone}
-                    onChange={e => setForm({...form, phone: e.target.value})}
-                    className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Password</label>
-                  <input 
-                    type="password" 
-                    value={form.password}
-                    onChange={e => setForm({...form, password: e.target.value})}
-                    className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
+                {isRunning ? (
+                  <div className="bg-slate-950/50 border border-slate-700 rounded-xl p-5 flex flex-col items-center justify-center space-y-1 shadow-inner relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-[40px] pointer-events-none" />
+                    <span className="text-xs text-slate-500 font-medium uppercase tracking-wider z-10">Live Balance</span>
+                    <span className="text-4xl font-bold text-white z-10 font-mono tracking-tight">
+                      {stats.currentBalance !== null ? `₹${stats.currentBalance.toFixed(2)}` : 'Loading...'}
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Phone Number</label>
+                      <input 
+                        type="text" 
+                        value={form.phone}
+                        disabled
+                        className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 opacity-50 cursor-not-allowed"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
 
-              {/* Strategy */}
               <div className="space-y-4 pt-4 border-t border-slate-800">
-                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Strategy Options</h3>
-                
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-slate-300 cursor-pointer select-none">Play Big / Small</label>
-                  <div className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${form.betBigSmall ? 'bg-blue-500' : 'bg-slate-700'}`} onClick={() => setForm({...form, betBigSmall: !form.betBigSmall})}>
-                    <div className={`w-4 h-4 rounded-full bg-white shadow-sm transform transition-transform ${form.betBigSmall ? 'translate-x-6' : 'translate-x-0'}`} />
-                  </div>
+                <div className="flex justify-between items-center mb-2">
+                    <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Run Options</h3>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-slate-300 cursor-pointer select-none">Play Red / Green</label>
-                  <div className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${form.betRedGreen ? 'bg-blue-500' : 'bg-slate-700'}`} onClick={() => setForm({...form, betRedGreen: !form.betRedGreen})}>
-                    <div className={`w-4 h-4 rounded-full bg-white shadow-sm transform transition-transform ${form.betRedGreen ? 'translate-x-6' : 'translate-x-0'}`} />
-                  </div>
-                </div>
+                {!isRunning && (
+                    <div className="flex flex-col space-y-3 p-3 bg-slate-950/50 rounded-xl border border-slate-800">
+                        <label className="flex items-center space-x-3">
+                            <input 
+                                type="checkbox" 
+                                checked={globalOptions.playBigSmall}
+                                onChange={e => setGlobalOptions({...globalOptions, playBigSmall: e.target.checked})}
+                                className="w-4 h-4 rounded text-blue-500 bg-slate-900 border-slate-700 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-slate-300">Play Big / Small</span>
+                        </label>
+                        <label className="flex items-center space-x-3">
+                            <input 
+                                type="checkbox" 
+                                checked={globalOptions.playRedGreen}
+                                onChange={e => setGlobalOptions({...globalOptions, playRedGreen: e.target.checked})}
+                                className="w-4 h-4 rounded text-blue-500 bg-slate-900 border-slate-700 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-slate-300">Play Red / Green / Violet</span>
+                        </label>
+                    </div>
+                )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Base Bet (Level 1)</label>
-                    <input 
-                      type="number" 
-                      value={form.baseBet}
-                      onChange={e => setForm({...form, baseBet: parseInt(e.target.value) || 1})}
-                      className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Start / Min Level</label>
-                    <input 
-                      type="number" 
-                      value={form.minLevel}
-                      onChange={e => setForm({...form, minLevel: parseInt(e.target.value) || 1})}
-                      className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Max Level</label>
-                  <input 
-                    type="number" 
-                    value={form.maxLevel}
-                    onChange={e => setForm({...form, maxLevel: parseInt(e.target.value) || 12})}
-                    className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1">Bot uses Martingale (Base * 2^(Level-1)). Bets are skipped if layer is below Min or above Max.</p>
+                <div className="space-y-3">
+                    <div className="flex justify-between items-center mt-2">
+                        <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Schedules</h4>
+                        {!isRunning && (
+                            <button onClick={handleAddSchedule} className="text-xs text-blue-400 hover:text-blue-300 flex items-center">
+                                <Plus className="w-3 h-3 mr-1" /> Add Schedule
+                            </button>
+                        )}
+                    </div>
+                    
+                    {schedules.map((s, idx) => (
+                        <div key={s.id} className="p-3 bg-slate-950/50 rounded-xl border border-slate-800 space-y-3 relative group">
+                            {schedules.length > 1 && !isRunning && (
+                                <button onClick={() => handleRemoveSchedule(s.id)} className="absolute -top-2 -right-2 p-1 bg-red-500/20 text-red-400 rounded-full hover:bg-red-500/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Trash2 className="w-3 h-3" />
+                                </button>
+                            )}
+                            <div>
+                                <label className="block text-[10px] text-slate-500 mb-1">Time Slot</label>
+                                <select 
+                                    value={s.timeSlotId}
+                                    onChange={e => handleScheduleChange(s.id, 'timeSlotId', e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                                    disabled={isRunning}
+                                >
+                                    <option value="">-- Select Time Slot --</option>
+                                    {timeSlots.map(t => <option key={t.id} value={t.id}>{t.name} ({t.startTime} - {t.endTime})</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-slate-500 mb-1">Strategy</label>
+                                <select 
+                                    value={s.strategyId}
+                                    onChange={e => handleScheduleChange(s.id, 'strategyId', e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                                    disabled={isRunning}
+                                >
+                                    <option value="">-- Select Strategy --</option>
+                                    {strategies.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    ))}
+                    {schedules.length === 0 && (
+                        <div className="text-xs text-slate-500 text-center py-2 bg-slate-950/30 rounded-xl border border-slate-800/50">
+                            No schedules defined. Bot will not run.
+                        </div>
+                    )}
                 </div>
               </div>
-
-              <button 
-                onClick={handleSaveSettings}
-                disabled={saving}
-                className="w-full mt-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold transition-colors flex justify-center items-center"
-              >
-                {saved ? <><Check className="w-4 h-4 mr-2" /> Saved!</> : 'Save Configuration'}
-              </button>
             </div>
           </div>
-
-          {/* Terminal Panel */}
-          <div className="lg:col-span-2 bg-black rounded-2xl border border-slate-800 overflow-hidden flex flex-col shadow-2xl">
-            <div className="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center">
-              <Terminal className="w-4 h-4 text-slate-500 mr-2" />
-              <span className="text-xs font-mono text-slate-400">wingo-bot.js — Live Output</span>
+          
+          <div className="lg:col-span-2 bg-slate-900/50 rounded-2xl border border-slate-800 p-6 backdrop-blur-md flex flex-col min-h-[600px]">
+            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800">
+              <div className="flex items-center space-x-3">
+                <Terminal className="w-5 h-5 text-emerald-400" />
+                <h2 className="text-lg font-bold text-white">Live Terminal Output</h2>
+              </div>
+              <div className="flex items-center space-x-2 text-xs">
+                <span className="text-slate-400">Status:</span>
+                <span className={`px-2 py-1 rounded font-medium ${isRunning ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>
+                  {isRunning ? 'Running' : 'Stopped'}
+                </span>
+              </div>
             </div>
-            <div className="p-4 flex-1 h-[600px] overflow-y-auto font-mono text-sm leading-relaxed scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-              {logs.length === 0 ? (
-                <div className="text-slate-600 italic">Waiting for bot to start...</div>
-              ) : (
-                logs.map((log, i) => (
-                  <div key={i} className={`
-                    ${log.includes('✅') ? 'text-emerald-400' : ''}
-                    ${log.includes('❌') || log.includes('Error') ? 'text-red-400' : ''}
-                    ${log.includes('⚠️') || log.includes('🛑') ? 'text-amber-400' : ''}
-                    ${log.includes('📊') ? 'text-blue-400 mt-2' : ''}
-                    ${log.includes('================') ? 'text-slate-600' : ''}
-                    ${!log.match(/[✅❌⚠️🛑📊=]/) ? 'text-slate-300' : ''}
-                  `}>
-                    {log}
+            
+            <div className="flex-1 bg-[#0d1117] rounded-xl border border-slate-800 p-4 font-mono text-sm overflow-hidden relative shadow-inner">
+              <div className="absolute top-2 right-4 text-slate-600 text-[10px] select-none">
+                wingo-bot.js
+              </div>
+              <div className="h-[500px] overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent pr-2">
+                {logs.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2">
+                    <Terminal className="w-8 h-8 opacity-20" />
+                    <p>No output available. Start the bot to see live logs.</p>
                   </div>
-                ))
-              )}
-              <div ref={logsEndRef} />
+                ) : (
+                  logs.map((log, i) => {
+                    const isError = log.includes('error') || log.includes('Failed') || log.includes('❌') || log.includes('⚠️');
+                    const isSuccess = log.includes('✅') || log.includes('🟢') || log.includes('won') || log.includes('WON');
+                    
+                    return (
+                      <div key={i} className={`font-mono break-all leading-tight ${
+                        isError ? 'text-rose-400' : 
+                        isSuccess ? 'text-emerald-400' : 
+                        'text-slate-300'
+                      }`}>
+                        {log}
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={logsEndRef} />
+              </div>
             </div>
           </div>
-
         </div>
       </div>
-      
-      {/* Background glow effects */}
-      <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-blue-600/5 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-emerald-600/5 rounded-full blur-[100px] pointer-events-none" />
-    </div>
+      </div>
+    </AppLayout>
   );
 }

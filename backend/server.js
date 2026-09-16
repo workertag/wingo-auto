@@ -5,12 +5,15 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { PrismaClient } = require('@prisma/client');
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const prisma = new PrismaClient();
 
 const PORT = process.env.PORT || 3001;
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || 'admin123';
@@ -25,6 +28,14 @@ const BOT_SCRIPT = path.join(ROOT_DIR, 'backend-bot.js');
 let botProcess = null;
 let botLogs = [];
 const MAX_LOG_LINES = 200;
+
+let botStats = {
+  totalWins: 0,
+  totalLosses: 0,
+  totalEarned: 0,
+  currentBalance: null,
+  history: []
+};
 
 // Middleware to protect routes
 const authenticateToken = (req, res, next) => {
@@ -48,6 +59,99 @@ app.post('/api/auth/login', (req, res) => {
     res.json({ token });
   } else {
     res.status(401).json({ error: 'Invalid password' });
+  }
+});
+
+// ======================= TIME SLOTS API =======================
+app.get('/api/time-slots', authenticateToken, async (req, res) => {
+  try {
+    const timeSlots = await prisma.timeSlot.findMany();
+    res.json(timeSlots);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch time slots' });
+  }
+});
+
+app.post('/api/time-slots', authenticateToken, async (req, res) => {
+  try {
+    const { name, startTime, endTime } = req.body;
+    const timeSlot = await prisma.timeSlot.create({
+      data: { name, startTime, endTime }
+    });
+    res.json(timeSlot);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create time slot' });
+  }
+});
+
+app.put('/api/time-slots/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, startTime, endTime } = req.body;
+    const timeSlot = await prisma.timeSlot.update({
+      where: { id },
+      data: { name, startTime, endTime }
+    });
+    res.json(timeSlot);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update time slot' });
+  }
+});
+
+app.delete('/api/time-slots/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.timeSlot.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete time slot' });
+  }
+});
+
+// ======================= STRATEGIES API =======================
+app.get('/api/strategies', authenticateToken, async (req, res) => {
+  try {
+    const strategies = await prisma.strategy.findMany();
+    res.json(strategies);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch strategies' });
+  }
+});
+
+app.post('/api/strategies', authenticateToken, async (req, res) => {
+  try {
+    const { name, minLevel, maxLevel, maxWins, maxLosses, levels, config } = req.body;
+    const strategy = await prisma.strategy.create({
+      data: { name, minLevel, maxLevel, maxWins, maxLosses, levels, config }
+    });
+    res.json(strategy);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create strategy' });
+  }
+});
+
+app.put('/api/strategies/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, minLevel, maxLevel, maxWins, maxLosses, levels, config } = req.body;
+    const strategy = await prisma.strategy.update({
+      where: { id },
+      data: { name, minLevel, maxLevel, maxWins, maxLosses, levels, config }
+    });
+    res.json(strategy);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update strategy' });
+  }
+});
+
+app.delete('/api/strategies/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.strategy.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete strategy' });
   }
 });
 
@@ -101,18 +205,30 @@ app.post('/api/bot/start', authenticateToken, (req, res) => {
     return res.status(400).json({ error: 'Bot is already running' });
   }
 
-  // Clear logs
+  const { schedules, globalOptions } = req.body;
+
+  // Clear logs and stats
   botLogs = [];
+  botStats = {
+    totalWins: 0,
+    totalLosses: 0,
+    totalEarned: 0,
+    currentBalance: null,
+    history: []
+  };
   
   // Pass credentials via environment variables
   const botEnv = Object.assign({}, process.env, {
     WINGO_PHONE: process.env.WINGO_PHONE,
-    WINGO_PASSWORD: process.env.WINGO_PASSWORD
+    WINGO_PASSWORD: process.env.WINGO_PASSWORD,
+    ACTIVE_SCHEDULES: JSON.stringify(schedules || []),
+    GLOBAL_OPTIONS: JSON.stringify(globalOptions || {})
   });
 
   botProcess = spawn('node', [BOT_SCRIPT], { 
     cwd: ROOT_DIR,
-    env: botEnv
+    env: botEnv,
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc']
   });
 
   const handleLog = (data) => {
@@ -127,12 +243,44 @@ app.post('/api/bot/start', authenticateToken, (req, res) => {
   botProcess.stdout.on('data', handleLog);
   botProcess.stderr.on('data', handleLog);
 
+  botProcess.on('message', (msg) => {
+    if (msg.type === 'ROUND_RESULT') {
+      const { issue, betType, betQuantity, won, amount } = msg.data;
+      if (won) {
+        botStats.totalWins += 1;
+        botStats.totalEarned += amount;
+      } else {
+        botStats.totalLosses += 1;
+        botStats.totalEarned += amount;
+      }
+      botStats.history.unshift({ issue, betType, betQuantity, won, amount, timestamp: new Date().toISOString() });
+      if (botStats.history.length > 50) {
+        botStats.history.pop();
+      }
+    } else if (msg.type === 'BALANCE_UPDATE') {
+      botStats.currentBalance = msg.data.balance;
+    }
+  });
+
   botProcess.on('close', (code) => {
     botLogs.push(`[SYSTEM] Bot stopped with exit code ${code}`);
     botProcess = null;
   });
 
   res.json({ success: true, message: 'Bot started' });
+});
+
+// ======================= BOT SESSIONS API =======================
+app.get('/api/bot-sessions', authenticateToken, async (req, res) => {
+  try {
+    const sessions = await prisma.botSession.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    });
+    res.json(sessions);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
 });
 
 app.post('/api/bot/stop', authenticateToken, (req, res) => {
@@ -148,6 +296,10 @@ app.post('/api/bot/stop', authenticateToken, (req, res) => {
 
 app.get('/api/bot/logs', authenticateToken, (req, res) => {
   res.json({ logs: botLogs });
+});
+
+app.get('/api/bot/stats', authenticateToken, (req, res) => {
+  res.json(botStats);
 });
 
 app.listen(PORT, () => {

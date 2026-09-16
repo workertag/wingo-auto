@@ -4,6 +4,12 @@
 // =====================================================================
 
 module.exports = {
+  // Base bet multiplier (Level 1 bet amount)
+  BASE_BET: 2,
+
+  // Minimum level to start betting
+  MIN_LEVEL: 1,
+
   // Betting flags
   BET_BIG_SMALL: true,     // ✅ ON
   BET_RED_GREEN: true,     // ✅ ON
@@ -20,5 +26,5 @@ module.exports = {
   BET_TABLE: null,  // null = use 2^(level-1) formula
 
   // Max level to bet on — skip if layer exceeds this (safety limit)
-  MAX_LEVEL: 12,
+  MAX_LEVEL: 7,
 };

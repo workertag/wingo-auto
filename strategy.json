@@ -1,5 +1,5 @@
 {
-  "BASE_BET": 1,
+  "BASE_BET": 2,
   "BET_BIG_SMALL": true,
   "BET_RED_GREEN": true,
   "ALLOWED_QUALITIES": [
@@ -8,5 +8,5 @@
   ],
   "BET_TABLE": null,
   "MIN_LEVEL": 1,
-  "MAX_LEVEL": 12
+  "MAX_LEVEL": 7
 }

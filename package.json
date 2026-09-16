@@ -4,7 +4,10 @@
   "description": "Wingo automation login bot",
   "main": "wingo-bot.js",
   "scripts": {
-    "start": "node wingo-bot.js"
+    "start": "node wingo-bot.js",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && node server.js",
+    "dev:frontend": "cd frontend && bun dev"
   },
   "dependencies": {
     "playwright": "^1.40.0",
@@ -13,5 +16,8 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "user-agents": "^1.1.0",
     "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   }
 }

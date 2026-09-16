@@ -18,50 +18,133 @@ const WS_URL = "wss://wingo.yl.n3y.in/api/ws?timer=30S";
 const TIMER = "30S";
 // =================================================================
 
-// ========================= HOT-RELOAD ============================
-const STRATEGY_PATH = path.resolve(__dirname, "backend-strategy.json");
+// ========================= DB CONFIG ============================
+const { PrismaClient } = require(path.join(__dirname, 'backend', 'node_modules', '@prisma', 'client'));
+const prisma = new PrismaClient();
 
-function loadStrategy() {
-  // Clear the cached module so require() re-reads the file
-  delete require.cache[require.resolve("./backend-strategy.json")];
+let activeSchedules = [];
+let globalOptions = {};
+let currentSessionId = null; 
+
+let currentStrategy = null;
+let currentTimeSlot = null;
+
+let sessionWins = 0;
+let sessionLosses = 0;
+let isSessionPaused = false; 
+
+async function loadConfig() {
   try {
-    const s = require("./backend-strategy.json");
-    return s;
+    const schedules = JSON.parse(process.env.ACTIVE_SCHEDULES || '[]');
+    globalOptions = JSON.parse(process.env.GLOBAL_OPTIONS || '{}');
+    
+    for (const sched of schedules) {
+      if (sched.timeSlotId && sched.strategyId) {
+        const ts = await prisma.timeSlot.findUnique({ where: { id: sched.timeSlotId } });
+        const st = await prisma.strategy.findUnique({ where: { id: sched.strategyId } });
+        if (ts && st) {
+          activeSchedules.push({ timeSlot: ts, strategy: st });
+        }
+      }
+    }
+    log(`✅ Loaded ${activeSchedules.length} active schedules.`);
   } catch (err) {
-    log(`⚠️  Error loading backend-strategy.json: ${err.message}`);
-    return null;
+    log(`⚠️  Error loading config from DB: ${err.message}`);
   }
 }
 
-let strategy = loadStrategy();
-
-// Watch strategy.json for changes and hot-reload
-fs.watch(STRATEGY_PATH, (eventType) => {
-  if (eventType === "change") {
-    const prev = JSON.stringify(strategy);
-    const next = loadStrategy();
-    if (next) {
-      strategy = next;
-      const curr = JSON.stringify(strategy);
-      if (prev !== curr) {
-        log("🔄 backend-strategy.json changed — hot-reloaded!");
-        log(`   BET_BIG_SMALL: ${strategy.BET_BIG_SMALL ? "ON ✅" : "OFF ❌"}`);
-        log(`   BET_RED_GREEN: ${strategy.BET_RED_GREEN ? "ON ✅" : "OFF ❌"}`);
-        log(`   ALLOWED_QUALITIES: [${strategy.ALLOWED_QUALITIES.join(", ")}]`);
-      }
-    }
-  }
-});
+// Call once on startup
+loadConfig();
 // =================================================================
 
 function log(msg) {
-  const ts = new Date().toISOString();
+  const ts = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }) + " IST";
   console.log(`[${ts}] ${msg}`);
 }
 
-/**
- * Fetch prediction state from the API
- */
+let pendingBets = [];
+
+async function checkActiveSchedule() {
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const hh = String(nowIST.getHours()).padStart(2, '0');
+    const mm = String(nowIST.getMinutes()).padStart(2, '0');
+    const currentTime = `${hh}:${mm}`;
+    
+    let found = null;
+    for (const sched of activeSchedules) {
+        if (currentTime >= sched.timeSlot.startTime && currentTime <= sched.timeSlot.endTime) {
+            found = sched;
+            break;
+        }
+    }
+    
+    if (found?.timeSlot.id !== currentTimeSlot?.id) {
+        if (currentSessionId) {
+            await prisma.botSession.update({
+                where: { id: currentSessionId },
+                data: { status: 'COMPLETED' }
+            });
+            currentSessionId = null;
+        }
+        
+        currentTimeSlot = found?.timeSlot || null;
+        currentStrategy = found?.strategy || null;
+        
+        sessionWins = 0;
+        sessionLosses = 0;
+        isSessionPaused = false;
+        
+        if (currentTimeSlot && currentStrategy) {
+            log(`🔄 Switched to Time Slot: ${currentTimeSlot.name}, Strategy: ${currentStrategy.name}`);
+            const dateStr = nowIST.toISOString().split('T')[0];
+            const session = await prisma.botSession.create({
+                data: {
+                    date: dateStr,
+                    timeSlotId: currentTimeSlot.id,
+                    timeSlotName: currentTimeSlot.name,
+                    strategyId: currentStrategy.id,
+                    strategyName: currentStrategy.name,
+                    status: 'ACTIVE'
+                }
+            });
+            currentSessionId = session.id;
+        } else {
+            log(`⏳ Current time ${currentTime} IST is outside all active time slots. Idle.`);
+        }
+    }
+    return currentTimeSlot != null;
+}
+
+async function scrapeBalance(page) {
+  try {
+    const balanceText = await page.evaluate(() => {
+      const el = document.querySelector('.Wallet__C-balance-l1 > div');
+      return el ? el.innerText.replace(/[^0-9.]/g, '') : null;
+    });
+    if (balanceText) {
+      const balance = parseFloat(balanceText);
+      if (!isNaN(balance)) {
+        log(`💰 Current Balance: ₹${balance.toFixed(2)}`);
+        
+        if (currentSessionId) {
+           const session = await prisma.botSession.findUnique({ where: { id: currentSessionId } });
+           if (session && session.initialBalance === null) {
+              await prisma.botSession.update({ where: { id: currentSessionId }, data: { initialBalance: balance, finalBalance: balance } });
+           } else if (session) {
+              await prisma.botSession.update({ where: { id: currentSessionId }, data: { finalBalance: balance } });
+           }
+        }
+
+        if (process.send) {
+          process.send({ type: 'BALANCE_UPDATE', data: { balance } });
+        }
+      }
+    }
+  } catch (err) {
+    log(`⚠️ Could not scrape balance: ${err.message}`);
+  }
+}
+
 function fetchPrediction() {
   return new Promise((resolve, reject) => {
     const url = `${API_BASE}/api/state?timer=${TIMER}`;
@@ -79,30 +162,25 @@ function fetchPrediction() {
   });
 }
 
-/**
- * Calculate bet quantity from level using Martingale: 2^(level-1)
- * Level 1 → 1, Level 2 → 2, Level 3 → 4, Level 4 → 8, ...
- */
 function getBetQuantity(level) {
-  const s = strategy;
-  // Use custom table if provided
-  if (s.BET_TABLE && s.BET_TABLE[level] !== undefined) {
-    return s.BET_TABLE[level];
+  if (!currentStrategy) return 1;
+  const s = currentStrategy;
+  
+  if (s.levels && s.levels.length > 0) {
+    const idx = (level || 1) - 1;
+    if (idx >= 0 && idx < s.levels.length) {
+      return s.levels[idx];
+    }
+    return s.levels[s.levels.length - 1];
   }
-  // Default formula: Base Bet * 2^(level-1)
-  const baseBet = s.BASE_BET || 1;
-  return baseBet * Math.pow(2, (level || 1) - 1);
+  return 1 * Math.pow(2, (level || 1) - 1);
 }
 
-/**
- * Place a bet by clicking the prediction button, setting quantity, and confirming.
- */
-async function placeBet(page, selector, label, level) {
+async function placeBet(page, selector, label, level, issue) {
   try {
     const quantity = getBetQuantity(level);
     log(`  Clicking ${label} button (Level ${level}, Qty ${quantity})...`);
 
-    // Step 1: Click the bet button
     const btn = page.locator(selector).first();
     try {
       await btn.click({ timeout: 2000 });
@@ -112,22 +190,18 @@ async function placeBet(page, selector, label, level) {
     }
     await page.waitForTimeout(1500);
 
-    // Step 2: Wait for the betting popup to appear
     const popup = page.locator('.lottery-container');
     await popup.waitFor({ state: 'visible', timeout: 3000 });
     log(`  Popup opened.`);
 
-    // Step 3: Set quantity using JavaScript to bypass Vue reactivity issues
     if (quantity > 1) {
       await page.evaluate((qty) => {
         const input = document.querySelector('.multiplier-section input[type="number"]');
         if (input) {
-          // Use native setter
           const nativeSetter = Object.getOwnPropertyDescriptor(
             window.HTMLInputElement.prototype, 'value'
           ).set;
           nativeSetter.call(input, qty);
-          // Dispatch events to trigger Vue's v-model
           input.dispatchEvent(new Event('input', { bubbles: true }));
           input.dispatchEvent(new Event('change', { bubbles: true }));
         }
@@ -136,7 +210,6 @@ async function placeBet(page, selector, label, level) {
       await page.waitForTimeout(500);
     }
 
-    // Step 4: Click the "Total amount" confirm button
     log(`  Confirming bet...`);
     const confirmBtn = popup.locator('button.bet-amount');
     await confirmBtn.waitFor({ state: 'visible', timeout: 3000 });
@@ -144,6 +217,9 @@ async function placeBet(page, selector, label, level) {
     await page.waitForTimeout(1000);
 
     log(`  ✅ ${label} L${level} bet placed — ₹${quantity}.00`);
+    if (issue) {
+      pendingBets.push({ issue, betType: label, betQuantity: quantity, level });
+    }
     return true;
   } catch (err) {
     log(`  ❌ Failed to place ${label} bet: ${err.message}`);
@@ -151,16 +227,22 @@ async function placeBet(page, selector, label, level) {
   }
 }
 
-/**
- * Handle a new round: fetch prediction and place bets
- */
-let isBetting = false; // Prevent double-betting
+let isBetting = false;
 
 async function onNewRound(page) {
   if (isBetting) {
     log("⚠️  Already placing a bet, skipping duplicate WS trigger.");
     return;
   }
+  
+  const isActive = await checkActiveSchedule();
+  if (!isActive) return;
+
+  if (isSessionPaused) {
+    log(`🛑 Bot is paused because Max Wins (${currentStrategy?.maxWins}) or Max Losses (${currentStrategy?.maxLosses}) reached in this time slot.`);
+    return;
+  }
+
   isBetting = true;
 
   try {
@@ -169,12 +251,91 @@ async function onNewRound(page) {
     const pending = apiState.pending;
     const engineState = apiState.state; 
 
+    if (apiState.results && pendingBets.length > 0) {
+      const resultsMap = {};
+      for (const res of apiState.results) {
+        resultsMap[res.issue] = res.num;
+      }
+
+      const remainingBets = [];
+      for (const bet of pendingBets) {
+        if (resultsMap[bet.issue] !== undefined) {
+          const winningNum = resultsMap[bet.issue];
+          let won = false;
+          const b = bet.betType;
+          
+          if (b === 'BIG' && winningNum >= 5) won = true;
+          else if (b === 'SMALL' && winningNum <= 4) won = true;
+          else if (b === 'RED' && [2,4,6,8,0].includes(winningNum)) won = true;
+          else if (b === 'GREEN' && [1,3,7,9,5].includes(winningNum)) won = true;
+          else if (b === 'VIOLET' && [0,5].includes(winningNum)) won = true;
+
+          let amount = 0;
+          if (won) {
+            sessionWins++;
+            if ((b === 'RED' && winningNum === 0) || (b === 'GREEN' && winningNum === 5)) {
+              amount = bet.betQuantity * 0.47;
+            } else if (b === 'VIOLET') {
+              amount = bet.betQuantity * 3.42;
+            } else {
+              amount = bet.betQuantity * 0.96;
+            }
+          } else {
+            sessionLosses++;
+            amount = -bet.betQuantity;
+          }
+
+          log(`🎯 Bet on ${b} for ${bet.issue} resolved: ${won ? 'WON' : 'LOST'} (Winning Num: ${winningNum}, Amount: ₹${amount.toFixed(2)})`);
+          
+          if (currentSessionId) {
+             await prisma.botSession.update({
+                where: { id: currentSessionId },
+                data: { totalWins: sessionWins, totalLosses: sessionLosses }
+             });
+          }
+
+          if (process.send) {
+            process.send({
+              type: 'ROUND_RESULT',
+              data: {
+                issue: bet.issue,
+                betType: b,
+                betQuantity: bet.betQuantity,
+                won,
+                amount
+              }
+            });
+          }
+        } else {
+          remainingBets.push(bet);
+        }
+      }
+      pendingBets = remainingBets;
+      
+      await page.waitForTimeout(2000);
+      await scrapeBalance(page);
+    }
+
     if (!pending) {
       log("⚠️  No pending prediction available. Skipping this round.");
       return;
     }
 
-    // Numeric Martingale levels from engine state
+    if (currentStrategy) {
+      if (currentStrategy.maxWins && sessionWins >= currentStrategy.maxWins) {
+        log(`🛑 Reached max wins limit (${currentStrategy.maxWins}). Pausing bot.`);
+        isSessionPaused = true;
+        if (currentSessionId) await prisma.botSession.update({ where: { id: currentSessionId }, data: { status: 'TAKE_PROFIT' } });
+        return;
+      }
+      if (currentStrategy.maxLosses && sessionLosses >= currentStrategy.maxLosses) {
+        log(`🛑 Reached max losses limit (${currentStrategy.maxLosses}). Pausing bot.`);
+        isSessionPaused = true;
+        if (currentSessionId) await prisma.botSession.update({ where: { id: currentSessionId }, data: { status: 'STOP_LOSS' } });
+        return;
+      }
+    }
+
     const bsLevel = engineState?.bsLevel || 1;
     const rgLevel = engineState?.rgLevel || 1;
 
@@ -182,33 +343,36 @@ async function onNewRound(page) {
     log(`   BS: ${pending.bsPred || "NO SIGNAL"} (Quality: ${pending.bsQuality}, Level: L${bsLevel}, Layer: ${pending.bsLayer})`);
     log(`   RG: ${pending.rgPred || "NO SIGNAL"} (Quality: ${pending.rgQuality}, Level: L${rgLevel}, Layer: ${pending.rgLayer})`);
 
-    // Read live strategy (hot-reloaded)
-    const s = strategy;
+    const s = currentStrategy;
+    if (!s) {
+       log("⚠️ No strategy loaded. Skipping bet.");
+       return;
+    }
+    const config = s.config || {};
+    const ALLOWED_QUALITIES = config.ALLOWED_QUALITIES || ["A", "B"];
 
-    // ---- Big / Small ----
-    if (s.BET_BIG_SMALL && pending.bsPred) {
-      if (bsLevel > (s.MAX_LEVEL || 12)) {
-        log(`   🛑 Skipping BS bet — Level ${bsLevel} exceeds MAX_LEVEL ${s.MAX_LEVEL || 12}`);
-      } else if (bsLevel < (s.MIN_LEVEL || 1)) {
-        log(`   🛑 Skipping BS bet — Level ${bsLevel} is below MIN_LEVEL ${s.MIN_LEVEL || 1}`);
-      } else if (s.ALLOWED_QUALITIES.includes(pending.bsQuality)) {
-        const selector =
-          pending.bsPred === "BIG"
-            ? ".Betting__C-foot-b"
-            : ".Betting__C-foot-s";
-        await placeBet(page, selector, pending.bsPred, bsLevel);
+    const betBigSmall = globalOptions.playBigSmall !== undefined ? globalOptions.playBigSmall : config.BET_BIG_SMALL;
+    const betRedGreen = globalOptions.playRedGreen !== undefined ? globalOptions.playRedGreen : config.BET_RED_GREEN;
+
+    if (betBigSmall && pending.bsPred) {
+      if (bsLevel > (s.maxLevel || 12)) {
+        log(`   🛑 Skipping BS bet — Level ${bsLevel} exceeds MAX_LEVEL ${s.maxLevel || 12}`);
+      } else if (bsLevel < (s.minLevel || 1)) {
+        log(`   🛑 Skipping BS bet — Level ${bsLevel} is below MIN_LEVEL ${s.minLevel || 1}`);
+      } else if (ALLOWED_QUALITIES.includes(pending.bsQuality)) {
+        const selector = pending.bsPred === "BIG" ? ".Betting__C-foot-b" : ".Betting__C-foot-s";
+        await placeBet(page, selector, pending.bsPred, bsLevel, pending.issue);
       } else {
-        log(`   ⏭️  Skipping BS bet — quality "${pending.bsQuality}" not in [${s.ALLOWED_QUALITIES}]`);
+        log(`   ⏭️  Skipping BS bet — quality "${pending.bsQuality}" not in [${ALLOWED_QUALITIES}]`);
       }
     }
 
-    // ---- Red / Green / Violet ----
-    if (s.BET_RED_GREEN && pending.rgPred) {
-      if (rgLevel > (s.MAX_LEVEL || 12)) {
-        log(`   🛑 Skipping RG bet — Level ${rgLevel} exceeds MAX_LEVEL ${s.MAX_LEVEL || 12}`);
-      } else if (rgLevel < (s.MIN_LEVEL || 1)) {
-        log(`   🛑 Skipping RG bet — Level ${rgLevel} is below MIN_LEVEL ${s.MIN_LEVEL || 1}`);
-      } else if (s.ALLOWED_QUALITIES.includes(pending.rgQuality)) {
+    if (betRedGreen && pending.rgPred) {
+      if (rgLevel > (s.maxLevel || 12)) {
+        log(`   🛑 Skipping RG bet — Level ${rgLevel} exceeds MAX_LEVEL ${s.maxLevel || 12}`);
+      } else if (rgLevel < (s.minLevel || 1)) {
+        log(`   🛑 Skipping RG bet — Level ${rgLevel} is below MIN_LEVEL ${s.minLevel || 1}`);
+      } else if (ALLOWED_QUALITIES.includes(pending.rgQuality)) {
         let selector;
         switch (pending.rgPred) {
           case "RED":    selector = ".Betting__C-head-red"; break;
@@ -218,21 +382,20 @@ async function onNewRound(page) {
             log(`   ⚠️  Unknown RG prediction: ${pending.rgPred}`);
             return;
         }
-        await placeBet(page, selector, pending.rgPred, rgLevel);
+        await placeBet(page, selector, pending.rgPred, rgLevel, pending.issue);
       } else {
-        log(`   ⏭️  Skipping RG bet — quality "${pending.rgQuality}" not in [${s.ALLOWED_QUALITIES}]`);
+        log(`   ⏭️  Skipping RG bet — quality "${pending.rgQuality}" not in [${ALLOWED_QUALITIES}]`);
       }
     }
   } catch (err) {
     log(`❌ Error in onNewRound: ${err.message}`);
   } finally {
     isBetting = false;
+    await page.waitForTimeout(1000);
+    await scrapeBalance(page);
   }
 }
 
-/**
- * Connect to prediction WebSocket
- */
 function connectWebSocket(page) {
   log("🔌 Connecting to prediction WebSocket...");
   const ws = new WebSocket(WS_URL);
@@ -266,20 +429,16 @@ function connectWebSocket(page) {
   return ws;
 }
 
-// ========================= MAIN =========================
 (async () => {
   log("Starting Wingo bot...");
-  // Use a separate user-data dir for the backend bot to avoid conflicts
   const userDataDir = "./backend-user-data";
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--headless=new"],
   });
 
-  const page =
-    context.pages().length > 0 ? context.pages()[0] : await context.newPage();
+  const page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
 
-  // Helper function to close popups
   const closePopups = async () => {
     try {
       const confirmBtn = page.locator(".announcement-dialog__button").first();
@@ -307,7 +466,6 @@ function connectWebSocket(page) {
     } catch (err) {}
   };
 
-  // ---- Login ----
   log("Navigating to login page...");
   try {
     await page.goto("https://bdg2030.com/#/login", {
@@ -340,7 +498,6 @@ function connectWebSocket(page) {
   await page.waitForTimeout(1000);
   await closePopups();
 
-  // ---- Navigate to Win Go 30s ----
   log("Clicking on 'Win Go 30s' card...");
   try {
     const winGoCard = page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
@@ -356,9 +513,9 @@ function connectWebSocket(page) {
   await page.screenshot({ path: "ready-to-bet.png" });
   log("✅ Bot is ready on the Win Go 30s page!");
 
-  // ---- Connect to prediction engine ----
+  await scrapeBalance(page);
+
   connectWebSocket(page);
 
-  // Keep alive forever
   await new Promise(() => {});
 })();
