@@ -34,7 +34,8 @@ let botStats = {
   totalLosses: 0,
   totalEarned: 0,
   currentBalance: null,
-  history: []
+  history: [],
+  depositState: { status: 'IDLE', address: null, failed: false }
 };
 
 // Middleware to protect routes
@@ -80,7 +81,8 @@ app.post('/api/time-slots', authenticateToken, async (req, res) => {
     });
     res.json(timeSlot);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to create time slot' });
+    console.error('Failed to create time slot:', err);
+    res.status(500).json({ error: 'Failed to create time slot: ' + err.message });
   }
 });
 
@@ -206,15 +208,21 @@ app.post('/api/bot/start', authenticateToken, (req, res) => {
   }
 
   const { schedules, globalOptions } = req.body;
+  console.log('Received startBot request with globalOptions:', globalOptions);
 
-  // Clear logs and stats
   botLogs = [];
+  
+  const logLine = `[${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).replace(',', '')} IST] 🛠️ Backend received start: ${JSON.stringify(req.body)}`;
+  botLogs.push(logLine);
+  if (botLogs.length > MAX_LOG_LINES) botLogs.shift();
+
   botStats = {
     totalWins: 0,
     totalLosses: 0,
     totalEarned: 0,
     currentBalance: null,
-    history: []
+    history: [],
+    depositState: { status: 'IDLE', address: null, failed: false }
   };
   
   // Pass credentials via environment variables
@@ -259,6 +267,8 @@ app.post('/api/bot/start', authenticateToken, (req, res) => {
       }
     } else if (msg.type === 'BALANCE_UPDATE') {
       botStats.currentBalance = msg.data.balance;
+    } else if (msg.type === 'DEPOSIT_UPDATE') {
+      botStats.depositState = { ...botStats.depositState, ...msg.data };
     }
   });
 
@@ -309,6 +319,24 @@ app.get('/api/bot/stats', authenticateToken, (req, res) => {
   res.json(botStats);
 });
 
-app.listen(PORT, () => {
+app.post('/api/bot/retry-deposit', authenticateToken, (req, res) => {
+  if (botProcess) {
+    botStats.depositState = { status: 'IDLE', address: null, failed: false };
+    botProcess.send({ type: 'RETRY_DEPOSIT' });
+  }
+  res.json({ success: true });
+});
+
+const server = app.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ ERROR: Port ${PORT} is already in use!`);
+    console.error(`Run: kill $(lsof -ti:${PORT}) to free it.\n`);
+  } else {
+    console.error('Server error:', err);
+  }
+  process.exit(1);
 });

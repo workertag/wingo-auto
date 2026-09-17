@@ -2,8 +2,9 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { api } from '../lib/api';
-import { Play, Square, Settings, Terminal, Shield, LogOut, Check, TrendingUp, TrendingDown, Activity, History, Plus, Trash2, Save } from 'lucide-react';
+import { Play, Square, Settings, Terminal, Shield, LogOut, Check, TrendingUp, TrendingDown, Activity, History, Plus, Trash2, Save, Wallet } from 'lucide-react';
 import { AppLayout } from '../components/Layout';
+import QRCode from 'react-qr-code';
 
 export const Route = createFileRoute('/')({
   beforeLoad: () => {
@@ -24,7 +25,8 @@ function Dashboard() {
     totalLosses: 0,
     totalEarned: 0,
     currentBalance: null as number | null,
-    history: [] as any[]
+    history: [] as any[],
+    depositState: { status: 'IDLE', address: null as string | null, failed: false }
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,7 +45,10 @@ function Dashboard() {
   const [schedules, setSchedules] = useState<{ id: number; timeSlotId: string; strategyId: string }[]>([]);
   const [globalOptions, setGlobalOptions] = useState({
     playBigSmall: true,
-    playRedGreen: true
+    playRedGreen: true,
+    minDepositBalance: 160,
+    depositUsdtAmount: 10,
+    depositWaitTime: 5
   });
 
   useEffect(() => {
@@ -140,7 +145,7 @@ function Dashboard() {
     }
   };
 
-  const handleGlobalOptionsChange = async (key: string, value: boolean) => {
+  const handleGlobalOptionsChange = async (key: string, value: boolean | number) => {
     const newOptions = { ...globalOptions, [key]: value };
     setGlobalOptions(newOptions);
     if (isRunning) {
@@ -149,6 +154,20 @@ function Dashboard() {
         } catch(err) {
             console.error(err);
         }
+    }
+  };
+
+  const handleRetryDeposit = async () => {
+    try {
+        const token = useAuthStore.getState().token;
+        await fetch('http://localhost:3001/api/bot/retry-deposit', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+    } catch(err) {
+        console.error('Retry deposit error', err);
     }
   };
 
@@ -323,6 +342,68 @@ function Dashboard() {
                         />
                         <span className="text-sm text-slate-300">Play Red / Green / Violet</span>
                     </label>
+                </div>
+
+                <div className="flex justify-between items-center mb-2 mt-4">
+                    <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center"><Wallet className="w-4 h-4 mr-2" /> Auto Deposit System</h3>
+                </div>
+
+                <div className="flex flex-col space-y-3 p-3 bg-slate-950/50 rounded-xl border border-slate-800">
+                    <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">Minimum Account Balance (₹)</label>
+                        <input 
+                            type="number"
+                            value={globalOptions.minDepositBalance}
+                            onChange={e => handleGlobalOptionsChange('minDepositBalance', Number(e.target.value))}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">Deposit USDT Amount</label>
+                        <input 
+                            type="number"
+                            value={globalOptions.depositUsdtAmount}
+                            onChange={e => handleGlobalOptionsChange('depositUsdtAmount', Number(e.target.value))}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">Wait Time (Minutes)</label>
+                        <input 
+                            type="number"
+                            value={globalOptions.depositWaitTime}
+                            onChange={e => handleGlobalOptionsChange('depositWaitTime', Number(e.target.value))}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                        />
+                    </div>
+
+                    {stats.depositState?.address && (
+                        <div className="mt-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded-xl text-center">
+                            <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Deposit Address</h4>
+                            <div className="bg-white p-2 rounded-lg inline-block mb-2">
+                                <QRCode value={stats.depositState.address} size={120} />
+                            </div>
+                            <div className="bg-slate-900 rounded p-2 text-xs font-mono text-slate-300 break-all select-all border border-slate-700">
+                                {stats.depositState.address}
+                            </div>
+                            {stats.depositState.status === 'WAITING' && (
+                                <div className="mt-2 text-xs text-blue-300 animate-pulse">Waiting for deposit...</div>
+                            )}
+                        </div>
+                    )}
+                    
+                    {stats.depositState?.failed && (
+                        <div className="mt-4 p-3 bg-red-900/20 border border-red-500/30 rounded-xl text-center">
+                            <h4 className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">Insufficient Balance</h4>
+                            <p className="text-xs text-slate-300 mb-3">The wait time has expired but the balance is still low.</p>
+                            <button 
+                                onClick={handleRetryDeposit}
+                                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded text-xs font-semibold transition-colors w-full"
+                            >
+                                Retry Deposit
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <div className="space-y-3">

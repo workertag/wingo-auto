@@ -48,6 +48,7 @@ async function loadConfig() {
       }
     }
     log(`✅ Loaded ${activeSchedules.length} active schedules.`);
+    log(`[DEBUG] Initial globalOptions: ${JSON.stringify(globalOptions)}`);
   } catch (err) {
     log(`⚠️  Error loading config from DB: ${err.message}`);
   }
@@ -62,16 +63,22 @@ function log(msg) {
   console.log(`[${ts}] ${msg}`);
 }
 
+let pendingBets = [];
+let isDepositing = false;
+let depositFailed = false;
+
 if (process.send) {
   process.on('message', (msg) => {
     if (msg.type === 'UPDATE_OPTIONS') {
       globalOptions = { ...globalOptions, ...msg.data };
       log("🔄 Live updated global options: " + JSON.stringify(msg.data));
+    } else if (msg.type === 'RETRY_DEPOSIT') {
+      depositFailed = false;
+      isDepositing = false;
+      log("🔄 Retry deposit triggered by user.");
     }
   });
 }
-
-let pendingBets = [];
 
 async function checkActiveSchedule() {
     const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
@@ -124,7 +131,90 @@ async function checkActiveSchedule() {
     return currentTimeSlot != null;
 }
 
-async function scrapeBalance(page) {
+async function handleDepositFlow(page, context, balance) {
+    if (isDepositing || depositFailed) return;
+    isDepositing = true;
+    log(`💸 Low balance (₹${balance}) detected. Initiating automated deposit flow...`);
+    
+    if (process.send) {
+        process.send({ type: 'DEPOSIT_UPDATE', data: { status: 'NAVIGATING', address: null, failed: false } });
+    }
+
+    try {
+        log("   Clicking back to home screen...");
+        await page.locator('.navbar__content-left .van-icon-arrow-left').first().click({ timeout: 5000 });
+        await page.waitForTimeout(2000);
+
+        log("   Clicking Accounts tab...");
+        await page.locator('.tabbar__container-item:has-text("Account")').first().click({ timeout: 5000 });
+        await page.waitForTimeout(2000);
+
+        log("   Clicking Deposit button...");
+        await page.locator('.totalSavings__container-content-item:has-text("Deposit")').first().click({ timeout: 5000 });
+        await page.waitForTimeout(2000);
+
+        log("   Selecting USDT option...");
+        await page.locator('.Recharge__container-tabcard__bot:has-text("USDT")').first().click({ timeout: 5000 });
+        await page.waitForTimeout(1000);
+
+        const amount = globalOptions.depositUsdtAmount || 10;
+        log(`   Entering USDT amount: ${amount}`);
+        await page.locator('.amount-input input').first().fill(String(amount));
+        await page.waitForTimeout(1000);
+
+        log("   Submitting deposit and waiting for new tab...");
+        const [newPage] = await Promise.all([
+            context.waitForEvent('page'),
+            page.locator('.Recharge__container-rechageBtn').first().click()
+        ]);
+
+        log("   New tab opened. Waiting for address...");
+        await newPage.waitForLoadState('networkidle');
+        
+        const addressEl = newPage.locator('._address_span_1fhyb_295').first();
+        await addressEl.waitFor({ state: 'visible', timeout: 15000 });
+        const rawText = await addressEl.innerText();
+        const address = rawText.trim();
+        log(`   ✅ Extracted Address: ${address}`);
+
+        if (process.send) {
+            process.send({ type: 'DEPOSIT_UPDATE', data: { status: 'WAITING', address, failed: false } });
+        }
+
+        const waitMinutes = globalOptions.depositWaitTime || 5;
+        log(`   ⏳ Waiting for ${waitMinutes} minutes for payment reflection...`);
+        await page.waitForTimeout(waitMinutes * 60 * 1000);
+
+        log("   Wait complete. Closing deposit tab...");
+        await newPage.close();
+        
+        log("   Navigating back to game page...");
+        await page.goto("https://bdg2030.com/#/login", { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(4000);
+        
+        try {
+            const winGoCard = page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
+            await winGoCard.click({ timeout: 5000 });
+            log("   Clicked 'Win Go 30s'.");
+        } catch (err) {
+            log("   Could not find 'Win Go 30s' card after deposit: " + err.message);
+        }
+        await page.waitForTimeout(3000);
+
+        isDepositing = false;
+        log("   Deposit flow complete. Resuming normal operations.");
+        
+    } catch (err) {
+        log(`   ❌ Deposit flow failed: ${err.message}`);
+        isDepositing = false;
+        depositFailed = true;
+        if (process.send) {
+            process.send({ type: 'DEPOSIT_UPDATE', data: { status: 'FAILED', address: null, failed: true } });
+        }
+    }
+}
+
+async function scrapeBalance(page, context) {
   try {
     const balanceText = await page.evaluate(() => {
       const el = document.querySelector('.Wallet__C-balance-l1 > div');
@@ -146,6 +236,18 @@ async function scrapeBalance(page) {
 
         if (process.send) {
           process.send({ type: 'BALANCE_UPDATE', data: { balance } });
+        }
+        
+        log(`[DEBUG] Check auto-deposit: balance=${balance}, minDepositBalance=${globalOptions.minDepositBalance}, isDepositing=${isDepositing}, depositFailed=${depositFailed}`);
+
+        if (globalOptions.minDepositBalance && balance <= globalOptions.minDepositBalance && context) {
+          if (depositFailed) {
+            if (process.send) {
+                process.send({ type: 'DEPOSIT_UPDATE', data: { status: 'FAILED', address: null, failed: true } });
+            }
+          } else if (!isDepositing) {
+            handleDepositFlow(page, context, balance);
+          }
         }
       }
     }
@@ -238,17 +340,21 @@ async function placeBet(page, selector, label, level, issue) {
 
 let isBetting = false;
 
-async function onNewRound(page) {
-  if (isBetting) {
-    log("⚠️  Already placing a bet, skipping duplicate WS trigger.");
+async function onNewRound(page, context) {
+  if (isBetting || isDepositing) {
+    log("⚠️  Already active (betting/depositing), skipping duplicate WS trigger.");
     return;
   }
   
   const isActive = await checkActiveSchedule();
-  if (!isActive) return;
+  if (!isActive) {
+      await scrapeBalance(page, context);
+      return;
+  }
 
   if (isSessionPaused) {
     log(`🛑 Bot is paused because Max Wins (${currentStrategy?.maxWins}) or Max Losses (${currentStrategy?.maxLosses}) reached in this time slot.`);
+    await scrapeBalance(page, context);
     return;
   }
 
@@ -322,7 +428,7 @@ async function onNewRound(page) {
       pendingBets = remainingBets;
       
       await page.waitForTimeout(2000);
-      await scrapeBalance(page);
+      await scrapeBalance(page, context);
     }
 
     if (!pending) {
@@ -401,11 +507,11 @@ async function onNewRound(page) {
   } finally {
     isBetting = false;
     await page.waitForTimeout(1000);
-    await scrapeBalance(page);
+    await scrapeBalance(page, context);
   }
 }
 
-function connectWebSocket(page) {
+function connectWebSocket(page, context) {
   log("🔌 Connecting to prediction WebSocket...");
   const ws = new WebSocket(WS_URL);
 
@@ -419,7 +525,7 @@ function connectWebSocket(page) {
       if (msg.type === "new_result") {
         log(`📨 WS: new_result for issue ${msg.issue}`);
         await page.waitForTimeout(2000);
-        await onNewRound(page);
+        await onNewRound(page, context);
       }
     } catch (err) {
       log(`⚠️  WS message parse error: ${err.message}`);
@@ -428,7 +534,7 @@ function connectWebSocket(page) {
 
   ws.on("close", () => {
     log("🔴 WebSocket disconnected. Reconnecting in 5s...");
-    setTimeout(() => connectWebSocket(page), 5000);
+    setTimeout(() => connectWebSocket(page, context), 5000);
   });
 
   ws.on("error", (err) => {
@@ -475,33 +581,35 @@ function connectWebSocket(page) {
     } catch (err) {}
   };
 
-  log("Navigating to login page...");
-  try {
-    await page.goto("https://bdg2030.com/#/login", {
-      waitUntil: "domcontentloaded",
-      timeout: 30000,
-    });
-  } catch (error) {
-    log("Navigation timeout, continuing...");
-  }
-  await page.waitForTimeout(4000);
-
-  log("Filling in phone number...");
-  await page.fill('input[name="userNumber"]', CREDENTIALS.PHONE);
-
-  log("Filling in password...");
-  await page.fill('input[placeholder="Password"]', CREDENTIALS.PASSWORD);
-
-  log("Submitting login...");
-  try {
-    const loginBtn = page.locator('text=/log\\s*in/i, text=/sign\\s*in/i, button:visible').first();
-    await loginBtn.click({ timeout: 2000 });
-  } catch (err) {
-    await page.press('input[placeholder="Password"]', "Enter");
-  }
-
-  log("Waiting for login response...");
+  log("Navigating to home page to check session...");
+  await page.goto("https://bdg2030.com", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(5000);
+
+  // Check if we are logged out by looking for login inputs
+  const loginInput = page.locator('input[name="userNumber"]').first();
+  const needsLogin = await loginInput.isVisible().catch(() => false);
+
+  if (needsLogin) {
+    log("Session not found. Proceeding with login...");
+    log("Filling in phone number...");
+    await loginInput.fill(CREDENTIALS.PHONE || '');
+    
+    log("Filling in password...");
+    await page.fill('input[placeholder="Password"]', CREDENTIALS.PASSWORD || '');
+    
+    log("Submitting login...");
+    try {
+      const loginBtn = page.locator('text=/log\\s*in/i, text=/sign\\s*in/i, button:visible').first();
+      await loginBtn.click({ timeout: 2000 });
+    } catch (err) {
+      await page.press('input[placeholder="Password"]', "Enter");
+    }
+    
+    log("Waiting for login response...");
+    await page.waitForTimeout(5000);
+  } else {
+    log("✅ Already logged in (session restored)!");
+  }
 
   await closePopups();
   await page.waitForTimeout(1000);
@@ -522,9 +630,9 @@ function connectWebSocket(page) {
   await page.screenshot({ path: "ready-to-bet.png" });
   log("✅ Bot is ready on the Win Go 30s page!");
 
-  await scrapeBalance(page);
+  await scrapeBalance(page, context);
 
-  connectWebSocket(page);
+  connectWebSocket(page, context);
 
   await new Promise(() => {});
 })();
