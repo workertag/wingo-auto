@@ -2,7 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { api } from '../lib/api';
-import { Play, Square, Settings, Terminal, Shield, LogOut, Check, TrendingUp, TrendingDown, Activity, History, Plus, Trash2, Save, Wallet } from 'lucide-react';
+import { Play, Square, Settings, Terminal, Shield, LogOut, Check, TrendingUp, TrendingDown, Activity, History, Plus, Trash2, Save, Wallet, Copy } from 'lucide-react';
 import { AppLayout } from '../components/Layout';
 import QRCode from 'react-qr-code';
 
@@ -31,8 +31,10 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
   
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState({
     phone: '',
@@ -92,7 +94,10 @@ function Dashboard() {
           api.getBotStatus(),
           api.getBotStats()
         ]);
-        setLogs(logsReq.logs);
+        // Only update logs if length changed to prevent unnecessary re-renders/scrolls
+        if (logsReq.logs.length !== logs.length) {
+           setLogs(logsReq.logs);
+        }
         setIsRunning(statusReq.running);
         setStats(statsReq);
       } catch (err) {
@@ -110,8 +115,16 @@ function Dashboard() {
   }, [isRunning]);
 
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
+    if (autoScroll) {
+      logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, autoScroll]);
+
+  const handleScroll = (e: any) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
+    setAutoScroll(isNearBottom);
+  };
 
   const handleStartStop = async () => {
     try {
@@ -263,8 +276,9 @@ function Dashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          <div className="bg-slate-900/50 rounded-2xl border border-slate-800 p-6 backdrop-blur-md h-fit">
-            <div className="flex items-center space-x-3 mb-6 border-b border-slate-800 pb-4">
+          <div className="space-y-8">
+            <div className="bg-slate-900/50 rounded-2xl border border-slate-800 p-6 backdrop-blur-md h-fit">
+              <div className="flex items-center space-x-3 mb-6 border-b border-slate-800 pb-4">
               <Settings className="w-5 h-5 text-blue-400" />
               <h2 className="text-lg font-bold text-white">Configuration</h2>
             </div>
@@ -383,8 +397,20 @@ function Dashboard() {
                             <div className="bg-white p-2 rounded-lg inline-block mb-2">
                                 <QRCode value={stats.depositState.address} size={120} />
                             </div>
-                            <div className="bg-slate-900 rounded p-2 text-xs font-mono text-slate-300 break-all select-all border border-slate-700">
-                                {stats.depositState.address}
+                            <div className="flex items-center space-x-2 mt-2">
+                                <div className="flex-1 bg-slate-900 rounded p-2 text-xs font-mono text-slate-300 break-all text-left border border-slate-700">
+                                    {stats.depositState.address}
+                                </div>
+                                <button 
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(stats.depositState.address!);
+                                      // Optional: could use a toast here
+                                    }}
+                                    className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors flex-shrink-0"
+                                    title="Copy Address"
+                                >
+                                    <Copy className="w-4 h-4" />
+                                </button>
                             </div>
                             {stats.depositState.status === 'WAITING' && (
                                 <div className="mt-2 text-xs text-blue-300 animate-pulse">Waiting for deposit...</div>
@@ -458,6 +484,41 @@ function Dashboard() {
               </div>
             </div>
           </div>
+
+          <div className="bg-slate-900/50 rounded-2xl border border-slate-800 p-6 backdrop-blur-md h-fit">
+              <div className="flex items-center space-x-3 mb-4 border-b border-slate-800 pb-4">
+                <History className="w-5 h-5 text-purple-400" />
+                <h2 className="text-lg font-bold text-white">Recent Games</h2>
+              </div>
+              <div className="space-y-3 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 pr-2">
+                 {stats.history?.length === 0 ? (
+                    <div className="text-xs text-slate-500 text-center py-4 bg-slate-950/30 rounded-xl border border-slate-800/50">
+                      No games played yet in this session.
+                    </div>
+                 ) : stats.history?.map((game: any, i: number) => (
+                    <div key={i} className="flex justify-between items-center p-3 bg-slate-950/50 rounded-xl border border-slate-800/50">
+                       <div>
+                          <div className="text-[10px] text-slate-400 font-mono mb-1 select-all">#{game.issue}</div>
+                          <div className="flex items-center space-x-2">
+                             <span className="text-[10px] uppercase font-bold text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded">
+                               {game.betType}
+                             </span>
+                             <span className="text-[10px] text-slate-500 font-mono">₹{game.betQuantity}</span>
+                          </div>
+                       </div>
+                       <div className="text-right">
+                          <div className={`text-sm font-bold font-mono ${game.won ? 'text-emerald-400' : 'text-red-400'}`}>
+                             {game.won ? '+' : ''}{(game.amount || 0).toFixed(2)}
+                          </div>
+                          <div className={`text-[9px] uppercase font-bold tracking-wider ${game.won ? 'text-emerald-500/70' : 'text-red-500/70'}`}>
+                             {game.won ? 'WIN' : 'LOSS'}
+                          </div>
+                       </div>
+                    </div>
+                 ))}
+              </div>
+            </div>
+          </div>
           
           <div className="lg:col-span-2 bg-slate-900/50 rounded-2xl border border-slate-800 p-6 backdrop-blur-md flex flex-col min-h-[600px]">
             <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800">
@@ -477,7 +538,11 @@ function Dashboard() {
               <div className="absolute top-2 right-4 text-slate-600 text-[10px] select-none">
                 wingo-bot.js
               </div>
-              <div className="h-[500px] overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent pr-2">
+              <div 
+                ref={logsContainerRef}
+                onScroll={handleScroll}
+                className="h-[500px] overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent pr-2"
+              >
                 {logs.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2">
                     <Terminal className="w-8 h-8 opacity-20" />
