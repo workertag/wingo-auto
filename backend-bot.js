@@ -585,24 +585,93 @@ function connectWebSocket(page, context) {
   await page.goto("https://bdg2030.com", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(5000);
 
-  // Check if we are logged out by looking for login inputs
-  const loginInput = page.locator('input[name="userNumber"]').first();
-  const needsLogin = await loginInput.isVisible().catch(() => false);
+  // Check if we are logged out by looking for the login form container
+  const loginForm = page.locator('.login__container-form').first();
+  let needsLogin = false;
+  try {
+      needsLogin = await loginForm.isVisible({ timeout: 5000 });
+  } catch (err) {
+      // If .login__container-form is not found, fallback to checking inputs
+      const anyInput = page.locator('input[name="userNumber"], input[name="userEmail"]').first();
+      needsLogin = await anyInput.isVisible().catch(() => false);
+  }
 
   if (needsLogin) {
     log("Session not found. Proceeding with login...");
-    log("Filling in phone number...");
-    await loginInput.fill(CREDENTIALS.PHONE || '');
+    const accountStr = CREDENTIALS.PHONE || '';
+    const isEmail = accountStr.includes('@');
+
+    if (isEmail) {
+        log("Email login detected. Switching to Email tab...");
+        const emailInput = page.locator('input[name="userEmail"]').first();
+        let isVisible = await emailInput.isVisible().catch(() => false);
+        
+        if (!isVisible) {
+            // Try to click any element that says 'Email' to switch tabs
+            const potentialTabs = page.locator('text=/Email|Account Log\\s*in/i');
+            const count = await potentialTabs.count();
+            for (let i = 0; i < count; i++) {
+                try {
+                    const el = potentialTabs.nth(i);
+                    if (await el.isVisible()) {
+                        await el.click({ timeout: 1000 });
+                        await page.waitForTimeout(500);
+                        if (await emailInput.isVisible()) {
+                            isVisible = true;
+                            break;
+                        }
+                    }
+                } catch (e) {}
+            }
+        }
+        
+        if (isVisible) {
+            log("Filling in email address...");
+            await emailInput.fill(accountStr);
+        } else {
+            log("❌ Failed to switch to Email login tab.");
+            // Fallback just in case
+            await emailInput.fill(accountStr).catch(() => {});
+        }
+    } else {
+        log("Phone login detected.");
+        const phoneInput = page.locator('input[name="userNumber"]').first();
+        let isVisible = await phoneInput.isVisible().catch(() => false);
+        
+        if (!isVisible) {
+             // If we are on Email tab, switch back to Phone tab
+            const potentialTabs = page.locator('text=/Phone|Mobile/i');
+            const count = await potentialTabs.count();
+            for (let i = 0; i < count; i++) {
+                try {
+                    const el = potentialTabs.nth(i);
+                    if (await el.isVisible()) {
+                        await el.click({ timeout: 1000 });
+                        await page.waitForTimeout(500);
+                        if (await phoneInput.isVisible()) {
+                            break;
+                        }
+                    }
+                } catch (e) {}
+            }
+        }
+        
+        log("Filling in phone number...");
+        await phoneInput.fill(accountStr).catch(() => {});
+    }
     
     log("Filling in password...");
-    await page.fill('input[placeholder="Password"]', CREDENTIALS.PASSWORD || '');
+    // Find the visible password input (since there is one for each tab)
+    const pwdInput = page.locator('input[type="password"]:visible').first();
+    await pwdInput.fill(CREDENTIALS.PASSWORD || '').catch(() => {});
     
     log("Submitting login...");
     try {
-      const loginBtn = page.locator('text=/log\\s*in/i, text=/sign\\s*in/i, button:visible').first();
+      // Find the visible login button
+      const loginBtn = page.locator('button:visible').filter({ hasText: /log\s*in/i }).first();
       await loginBtn.click({ timeout: 2000 });
     } catch (err) {
-      await page.press('input[placeholder="Password"]', "Enter");
+      await page.keyboard.press('Enter');
     }
     
     log("Waiting for login response...");

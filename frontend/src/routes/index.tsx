@@ -311,11 +311,12 @@ function Dashboard() {
                 ) : (
                   <>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">Phone Number</label>
+                      <label className="block text-xs text-slate-500 mb-1">Phone / Email</label>
                       <input 
                         type="text" 
                         value={form.phone}
                         onChange={e => setForm({...form, phone: e.target.value})}
+                        placeholder="Enter phone number or email"
                         className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
                       />
                     </div>
