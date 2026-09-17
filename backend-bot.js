@@ -607,8 +607,8 @@ function connectWebSocket(page, context) {
         let isVisible = await emailInput.isVisible().catch(() => false);
         
         if (!isVisible) {
-            // Try to click any element that says 'Email' to switch tabs
-            const potentialTabs = page.locator('text=/Email|Account Log\\s*in/i');
+            // Try to click the Email tab
+            const potentialTabs = page.locator('.login_container-tab .tab').filter({ hasText: /Email/i });
             const count = await potentialTabs.count();
             for (let i = 0; i < count; i++) {
                 try {
@@ -640,7 +640,7 @@ function connectWebSocket(page, context) {
         
         if (!isVisible) {
              // If we are on Email tab, switch back to Phone tab
-            const potentialTabs = page.locator('text=/Phone|Mobile/i');
+            const potentialTabs = page.locator('.login_container-tab .tab').filter({ hasText: /Phone/i });
             const count = await potentialTabs.count();
             for (let i = 0; i < count; i++) {
                 try {
