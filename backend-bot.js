@@ -216,21 +216,25 @@ async function handleDepositFlow(page, context, balance) {
 
 async function scrapeBalance(page, context) {
   try {
-    // Wait a moment for the wallet card to fully render
-    await page.waitForTimeout(3000);
+    let balanceText = null;
+    let attempts = 0;
     
-    // Direct extraction using the exact selector from the site's HTML:
-    // <div class="Wallet__C-balance-l1"><div>₹230.59</div></div>
-    const balanceText = await page.evaluate(() => {
-      const el = document.querySelector('.Wallet__C-balance-l1 div');
-      if (el) return el.innerText;
-      // Fallback: try the parent container
-      const parent = document.querySelector('.Wallet__C-balance-l1');
-      if (parent) return parent.innerText;
-      return null;
-    });
+    // Poll the DOM for up to 20 seconds
+    while (attempts < 20) {
+        balanceText = await page.evaluate(() => {
+            const el = document.querySelector('.Wallet__C-balance-l1');
+            return el ? el.innerText : null;
+        });
+        
+        if (balanceText && balanceText.includes('₹')) {
+            break;
+        }
+        
+        await page.waitForTimeout(1000);
+        attempts++;
+    }
     
-    log(`[DEBUG] Raw balance text scraped: "${balanceText}"`);
+    log(`[DEBUG] Raw balance text scraped: "${balanceText}" (after ${attempts}s)`);
     
     if (balanceText) {
       const cleaned = balanceText.replace(/[^0-9.]/g, '');
