@@ -546,7 +546,8 @@ function connectWebSocket(page, context) {
 
 (async () => {
   log("Starting Wingo bot...");
-  const userDataDir = "./backend-user-data";
+  const accountId = (CREDENTIALS.PHONE || 'default').replace(/[^a-zA-Z0-9]/g, '_');
+  const userDataDir = `./backend-user-data-${accountId}`;
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--headless=new"],
