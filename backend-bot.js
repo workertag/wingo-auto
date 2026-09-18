@@ -221,8 +221,24 @@ async function scrapeBalance(page, context) {
       let fallbackHtml = null;
       if (!el) {
           const elements = Array.from(document.querySelectorAll('*'));
-          el = elements.find(e => e.innerText && e.innerText.includes('₹') && e.children.length === 0);
-          fallbackHtml = el ? el.outerHTML : "Not found";
+          const candidates = elements.filter(e => 
+             e.tagName !== 'SCRIPT' && 
+             e.tagName !== 'STYLE' && 
+             e.innerText && 
+             e.innerText.includes('₹') && 
+             e.children.length === 0 &&
+             e.offsetParent !== null
+          );
+          if (candidates.length > 0) {
+             // Find one that actually contains numbers alongside the ₹ symbol
+             el = candidates.find(c => /[0-9]/.test(c.innerText));
+             
+             // If none contains numbers, it might be that ₹ and the number are in separate spans
+             if (!el) {
+                 el = candidates[0].parentElement;
+             }
+             fallbackHtml = el ? el.outerHTML : "Not found";
+          }
       }
       return { 
           text: el ? el.innerText.replace(/[^0-9.]/g, '') : null,
