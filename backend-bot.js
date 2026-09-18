@@ -706,44 +706,112 @@ function connectWebSocket(page, context) {
   try {
     const addToDesktop = page.locator('text="Add to Desktop"').first();
     if (await addToDesktop.isVisible({ timeout: 1000 })) {
-      // Click somewhere else to dismiss, or press escape
       await page.keyboard.press('Escape');
       await page.waitForTimeout(500);
       log("Dismissed 'Add to Desktop' overlay.");
     }
   } catch (err) {}
 
+  // Step 1: Try clicking Win Go 30s card directly (old layout)
   log("Clicking on 'Win Go 30s' card...");
+  let navigatedToGame = false;
+  
   try {
     const winGoCard = page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
-    await winGoCard.click({ timeout: 5000 });
-    log("Clicked 'Win Go 30s'.");
-  } catch (err) {
-    log("Could not find 'Win Go 30s' card: " + err.message);
-  }
-
-  await page.waitForTimeout(3000);
-  await closePopups();
-
-  // Verify we actually landed on the game page by checking the URL or game elements
-  const currentUrl = page.url();
-  const hasGameElement = await page.evaluate(() => !!document.querySelector('.TimeLeft__C, .Wallet__C-balance-l1, .GameRecord__C'));
-  log(`[DEBUG] After click - URL: ${currentUrl}, hasGameElement: ${hasGameElement}`);
-  
-  if (!hasGameElement) {
-    log("⚠️ Click didn't navigate to game page. Trying direct URL...");
-    // Navigate directly to the Win Go page
-    try {
-      await page.goto("https://bdg2030.com/#/lottery/WinGo?id=1", { waitUntil: 'domcontentloaded', timeout: 15000 });
+    if (await winGoCard.isVisible({ timeout: 2000 })) {
+      await winGoCard.click({ timeout: 3000 });
+      log("Clicked 'Win Go 30s' directly.");
       await page.waitForTimeout(3000);
       await closePopups();
-      log("✅ Navigated to Win Go via direct URL.");
+      navigatedToGame = await page.evaluate(() => !!document.querySelector('.TimeLeft__C, .Wallet__C-balance-l1, .GameRecord__C'));
+    }
+  } catch (err) {}
+
+  // Step 2: If not found, try clicking the Lottery category first (new layout)
+  if (!navigatedToGame) {
+    log("⚠️ Direct Win Go card not found. Trying Lottery category first...");
+    try {
+      const lotteryCard = page.locator('text="Lottery"').first();
+      if (await lotteryCard.isVisible({ timeout: 2000 })) {
+        await lotteryCard.click({ timeout: 3000 });
+        log("Clicked 'Lottery' category.");
+        await page.waitForTimeout(2000);
+        await closePopups();
+        
+        // Now look for Win Go 30s
+        const winGoCard = page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
+        if (await winGoCard.isVisible({ timeout: 3000 })) {
+          await winGoCard.click({ timeout: 3000 });
+          log("Clicked 'Win Go 30s' from Lottery page.");
+          await page.waitForTimeout(3000);
+          await closePopups();
+          navigatedToGame = await page.evaluate(() => !!document.querySelector('.TimeLeft__C, .Wallet__C-balance-l1, .GameRecord__C'));
+        }
+      }
     } catch (err) {
-      log("❌ Direct URL navigation also failed: " + err.message);
+      log("Lottery category click failed: " + err.message);
+    }
+  }
+  
+  // Step 3: If still not on game page, try the "Win Go" tab in the nav
+  if (!navigatedToGame) {
+    log("⚠️ Still not on game page. Trying 'Win Go' tab...");
+    try {
+      const winGoTab = page.locator('text="Win Go"').first();
+      if (await winGoTab.isVisible({ timeout: 2000 })) {
+        await winGoTab.click({ timeout: 3000 });
+        log("Clicked 'Win Go' tab.");
+        await page.waitForTimeout(2000);
+        await closePopups();
+        
+        const winGoCard = page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
+        if (await winGoCard.isVisible({ timeout: 3000 })) {
+          await winGoCard.click({ timeout: 3000 });
+          log("Clicked 'Win Go 30s' from Win Go tab.");
+          await page.waitForTimeout(3000);
+          await closePopups();
+          navigatedToGame = await page.evaluate(() => !!document.querySelector('.TimeLeft__C, .Wallet__C-balance-l1, .GameRecord__C'));
+        }
+      }
+    } catch (err) {}
+  }
+
+  // Step 4: Last resort - try navigating via Activity tab
+  if (!navigatedToGame) {
+    log("⚠️ All clicks failed. Trying Activity tab...");
+    try {
+      const activityTab = page.locator('text="Activity"').first();
+      await activityTab.click({ timeout: 3000 });
+      await page.waitForTimeout(2000);
+      // Go back to home and try again
+      await page.goto("https://bdg2030.com/#/lottery", { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.waitForTimeout(3000);
+      await closePopups();
+      
+      const winGoCard = page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
+      if (await winGoCard.isVisible({ timeout: 5000 })) {
+        await winGoCard.click({ timeout: 3000 });
+        log("Clicked 'Win Go 30s' after navigating to lottery page.");
+        await page.waitForTimeout(3000);
+        await closePopups();
+        navigatedToGame = true;
+      }
+    } catch (err) {
+      log("Activity fallback also failed: " + err.message);
     }
   }
 
+  // Take a screenshot of whatever page we ended up on
   await page.screenshot({ path: "ready-to-bet.png" });
+  
+  // Log the current page state for debugging
+  const debugInfo = await page.evaluate(() => {
+    const url = window.location.href;
+    const classes = Array.from(document.querySelectorAll('[class]')).map(e => e.className).filter(c => typeof c === 'string' && (c.includes('Wallet') || c.includes('balance') || c.includes('TimeLeft') || c.includes('GameRecord'))).slice(0, 10);
+    return { url, classes };
+  });
+  log(`[DEBUG] Current state - URL: ${debugInfo.url}, Relevant classes: ${JSON.stringify(debugInfo.classes)}`);
+  
   log("✅ Bot is ready on the Win Go 30s page!");
 
   await scrapeBalance(page, context);
