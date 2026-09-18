@@ -13,6 +13,7 @@ function StrategiesPage() {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   
   const defaultForm = { 
     name: '', minLevel: 1, maxLevel: 20, maxWins: 10, maxLosses: 5, 
@@ -236,13 +237,17 @@ function StrategiesPage() {
             </div>
           ) : (
             strategies.map(st => (
-              <div key={st.id} className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 shadow-lg group hover:border-slate-700 transition-all">
+              <div 
+                key={st.id} 
+                className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800 shadow-lg group hover:border-slate-700 transition-all cursor-pointer"
+                onClick={() => setExpandedId(expandedId === st.id ? null : st.id)}
+              >
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h3 className="font-bold text-white text-lg">{st.name}</h3>
                     <p className="text-xs text-slate-400 mt-1">Limits: {st.maxWins}W / {st.maxLosses}L</p>
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="flex space-x-2" onClick={e => e.stopPropagation()}>
                     <button onClick={() => handleEdit(st)} className="text-slate-500 hover:text-purple-400 transition-colors p-1.5 bg-slate-950/50 rounded-lg hover:bg-slate-800">
                       <Edit2 className="w-4 h-4" />
                     </button>
@@ -266,6 +271,20 @@ function StrategiesPage() {
                     <span className="text-rose-400 font-mono">₹{st.levels[(st.maxLevel || 1) - 1]}</span>
                   </div>
                 </div>
+
+                {expandedId === st.id && (
+                  <div className="mt-4 pt-4 border-t border-slate-800/80 animate-in slide-in-from-top-2">
+                    <h4 className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">All Bet Levels</h4>
+                    <div className="grid grid-cols-5 gap-2">
+                      {st.levels.slice(0, st.maxLevel).map((amt: number, idx: number) => (
+                        <div key={idx} className="bg-slate-950/50 rounded border border-slate-800/50 p-1.5 text-center">
+                          <div className="text-[10px] text-slate-500 mb-0.5">L{idx + 1}</div>
+                          <div className="text-xs font-mono text-slate-300">₹{amt}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           )}
