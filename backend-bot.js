@@ -220,13 +220,23 @@ async function scrapeBalance(page, context) {
     let fallbackHtml = null;
     
     // Use Playwright locator with timeout to wait for the element to render
-    const balanceLocator = page.locator('.Wallet__C-balance-l1').first();
+    const balanceLocator = page.locator('.Wallet__C-balance-l1, text="Wallet balance"').first();
     
     try {
-        await balanceLocator.waitFor({ state: 'visible', timeout: 10000 });
-        balanceText = await balanceLocator.innerText();
+        await balanceLocator.waitFor({ state: 'visible', timeout: 15000 });
+        balanceText = await page.evaluate(() => {
+            let el = document.querySelector('.Wallet__C-balance-l1');
+            if (!el) {
+                const elements = Array.from(document.querySelectorAll('*'));
+                const label = elements.find(e => e.innerText && e.innerText.trim() === 'Wallet balance');
+                if (label && label.parentElement && label.parentElement.previousElementSibling) {
+                    el = label.parentElement.previousElementSibling;
+                }
+            }
+            return el ? el.innerText : null;
+        });
     } catch (err) {
-        // Fallback: If not found after 10s, try the robust DOM scan
+        // Fallback: If not found after 15s, try the robust DOM scan
         const res = await page.evaluate(() => {
             const elements = Array.from(document.querySelectorAll('*'));
             const candidates = elements.filter(e => 
@@ -235,7 +245,8 @@ async function scrapeBalance(page, context) {
                e.innerText && 
                e.innerText.includes('₹') && 
                e.children.length === 0 &&
-               e.offsetParent !== null
+               e.offsetParent !== null &&
+               !e.innerText.toLowerCase().includes('receive') // Ignore reward popups
             );
             let el = null;
             let fHtml = null;
