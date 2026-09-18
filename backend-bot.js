@@ -599,23 +599,14 @@ function connectWebSocket(page, context) {
     } catch (err) {}
   };
 
-  log("Navigating to home page to check session...");
-  await page.goto("https://bdg2030.com", { waitUntil: "domcontentloaded" });
+  // Always do a fresh login - BDG only allows one active session at a time,
+  // so any saved session gets invalidated when user logs in elsewhere.
+  log("Navigating to login page...");
+  await page.goto("https://bdg2030.com/#/login", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(5000);
 
-  // Check if we are logged out by looking for the login form container
-  const loginForm = page.locator('.login__container-form').first();
-  let needsLogin = false;
-  try {
-      needsLogin = await loginForm.isVisible({ timeout: 5000 });
-  } catch (err) {
-      // If .login__container-form is not found, fallback to checking inputs
-      const anyInput = page.locator('input[name="userNumber"], input[name="userEmail"]').first();
-      needsLogin = await anyInput.isVisible().catch(() => false);
-  }
-
-  if (needsLogin) {
-    log("Session not found. Proceeding with login...");
+  {
+    log("Performing fresh login...");
     const accountStr = CREDENTIALS.PHONE || '';
     const isEmail = accountStr.includes('@');
 
@@ -648,7 +639,6 @@ function connectWebSocket(page, context) {
             await emailInput.fill(accountStr);
         } else {
             log("❌ Failed to switch to Email login tab.");
-            // Fallback just in case
             await emailInput.fill(accountStr).catch(() => {});
         }
     } else {
@@ -694,8 +684,6 @@ function connectWebSocket(page, context) {
     
     log("Waiting for login response...");
     await page.waitForTimeout(5000);
-  } else {
-    log("✅ Already logged in (session restored)!");
   }
 
   await closePopups();
