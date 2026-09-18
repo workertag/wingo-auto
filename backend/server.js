@@ -184,8 +184,26 @@ app.post('/api/settings', authenticateToken, (req, res) => {
     
     // Update .env for credentials
     if (credentials) {
-      const envContent = `WINGO_PHONE=${credentials.phone}\nWINGO_PASSWORD=${credentials.password}\nDASHBOARD_PASSWORD=${DASHBOARD_PASSWORD}\nJWT_SECRET=${JWT_SECRET}`;
-      fs.writeFileSync(path.join(__dirname, '.env'), envContent);
+      const envPath = path.join(__dirname, '.env');
+      let envVars = {};
+      try {
+          const raw = fs.readFileSync(envPath, 'utf8');
+          raw.split('\n').forEach(line => {
+             if (line && line.includes('=')) {
+                 const [key, ...rest] = line.split('=');
+                 envVars[key.trim()] = rest.join('=').trim();
+             }
+          });
+      } catch(e) {}
+      
+      envVars['WINGO_PHONE'] = credentials.phone;
+      envVars['WINGO_PASSWORD'] = credentials.password;
+      if (!envVars['DASHBOARD_PASSWORD']) envVars['DASHBOARD_PASSWORD'] = DASHBOARD_PASSWORD;
+      if (!envVars['JWT_SECRET']) envVars['JWT_SECRET'] = JWT_SECRET;
+      
+      const newEnvContent = Object.keys(envVars).map(k => `${k}=${envVars[k]}`).join('\n');
+      fs.writeFileSync(envPath, newEnvContent);
+      
       // Update running process env too
       process.env.WINGO_PHONE = credentials.phone;
       process.env.WINGO_PASSWORD = credentials.password;
