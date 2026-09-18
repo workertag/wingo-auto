@@ -276,9 +276,9 @@ function StrategiesPage() {
                   <div className="mt-4 pt-4 border-t border-slate-800/80 animate-in slide-in-from-top-2">
                     <h4 className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">All Bet Levels</h4>
                     <div className="grid grid-cols-5 gap-2">
-                      {st.levels.slice(0, st.maxLevel).map((amt: number, idx: number) => (
+                      {st.levels.slice(st.minLevel - 1, st.maxLevel).map((amt: number, idx: number) => (
                         <div key={idx} className="bg-slate-950/50 rounded border border-slate-800/50 p-1.5 text-center">
-                          <div className="text-[10px] text-slate-500 mb-0.5">L{idx + 1}</div>
+                          <div className="text-[10px] text-slate-500 mb-0.5">L{idx + (st.minLevel || 1)}</div>
                           <div className="text-xs font-mono text-slate-300">₹{amt}</div>
                         </div>
                       ))}
