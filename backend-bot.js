@@ -216,60 +216,25 @@ async function handleDepositFlow(page, context, balance) {
 
 async function scrapeBalance(page, context) {
   try {
-    let balanceText = null;
-    let fallbackHtml = null;
+    // Wait a moment for the wallet card to fully render
+    await page.waitForTimeout(3000);
     
-    // Use Playwright locator with timeout to wait for the element to render
-    const balanceLocator = page.locator('.Wallet__C-balance-l1, text="Wallet balance"').first();
+    // Direct extraction using the exact selector from the site's HTML:
+    // <div class="Wallet__C-balance-l1"><div>₹230.59</div></div>
+    const balanceText = await page.evaluate(() => {
+      const el = document.querySelector('.Wallet__C-balance-l1 div');
+      if (el) return el.innerText;
+      // Fallback: try the parent container
+      const parent = document.querySelector('.Wallet__C-balance-l1');
+      if (parent) return parent.innerText;
+      return null;
+    });
     
-    try {
-        await balanceLocator.waitFor({ state: 'visible', timeout: 15000 });
-        balanceText = await page.evaluate(() => {
-            let el = document.querySelector('.Wallet__C-balance-l1');
-            if (!el) {
-                const elements = Array.from(document.querySelectorAll('*'));
-                const label = elements.find(e => e.innerText && e.innerText.trim() === 'Wallet balance');
-                if (label && label.parentElement && label.parentElement.previousElementSibling) {
-                    el = label.parentElement.previousElementSibling;
-                }
-            }
-            return el ? el.innerText : null;
-        });
-    } catch (err) {
-        // Fallback: If not found after 15s, try the robust DOM scan
-        const res = await page.evaluate(() => {
-            const elements = Array.from(document.querySelectorAll('*'));
-            const candidates = elements.filter(e => 
-               e.tagName !== 'SCRIPT' && 
-               e.tagName !== 'STYLE' && 
-               e.innerText && 
-               e.innerText.includes('₹') && 
-               e.children.length === 0 &&
-               e.offsetParent !== null &&
-               !e.innerText.toLowerCase().includes('receive') // Ignore reward popups
-            );
-            let el = null;
-            let fHtml = null;
-            if (candidates.length > 0) {
-               el = candidates.find(c => /[0-9]/.test(c.innerText));
-               if (!el) el = candidates[0].parentElement;
-               fHtml = el ? el.outerHTML : "Not found";
-            }
-            return { 
-                text: el ? el.innerText : null,
-                fallbackHtml: fHtml
-            };
-        });
-        balanceText = res.text;
-        fallbackHtml = res.fallbackHtml;
-    }
-    
-    if (fallbackHtml) {
-        log(`[DEBUG] Balance element fallback used: ${fallbackHtml}`);
-    }
+    log(`[DEBUG] Raw balance text scraped: "${balanceText}"`);
     
     if (balanceText) {
-      const balance = parseFloat(balanceText.replace(/[^0-9.]/g, ''));
+      const cleaned = balanceText.replace(/[^0-9.]/g, '');
+      const balance = parseFloat(cleaned);
       if (!isNaN(balance)) {
         log(`💰 Current Balance: ₹${balance.toFixed(2)}`);
         
