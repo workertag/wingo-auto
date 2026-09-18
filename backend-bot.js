@@ -216,43 +216,49 @@ async function handleDepositFlow(page, context, balance) {
 
 async function scrapeBalance(page, context) {
   try {
-    const res = await page.evaluate(() => {
-      let el = document.querySelector('.Wallet__C-balance-l1 > div');
-      let fallbackHtml = null;
-      if (!el) {
-          const elements = Array.from(document.querySelectorAll('*'));
-          const candidates = elements.filter(e => 
-             e.tagName !== 'SCRIPT' && 
-             e.tagName !== 'STYLE' && 
-             e.innerText && 
-             e.innerText.includes('₹') && 
-             e.children.length === 0 &&
-             e.offsetParent !== null
-          );
-          if (candidates.length > 0) {
-             // Find one that actually contains numbers alongside the ₹ symbol
-             el = candidates.find(c => /[0-9]/.test(c.innerText));
-             
-             // If none contains numbers, it might be that ₹ and the number are in separate spans
-             if (!el) {
-                 el = candidates[0].parentElement;
-             }
-             fallbackHtml = el ? el.outerHTML : "Not found";
-          }
-      }
-      return { 
-          text: el ? el.innerText.replace(/[^0-9.]/g, '') : null,
-          fallbackHtml
-      };
-    });
+    let balanceText = null;
+    let fallbackHtml = null;
     
-    if (res.fallbackHtml) {
-        log(`[DEBUG] Balance element fallback: ${res.fallbackHtml}`);
+    // Use Playwright locator with timeout to wait for the element to render
+    const balanceLocator = page.locator('.Wallet__C-balance-l1').first();
+    
+    try {
+        await balanceLocator.waitFor({ state: 'visible', timeout: 10000 });
+        balanceText = await balanceLocator.innerText();
+    } catch (err) {
+        // Fallback: If not found after 10s, try the robust DOM scan
+        const res = await page.evaluate(() => {
+            const elements = Array.from(document.querySelectorAll('*'));
+            const candidates = elements.filter(e => 
+               e.tagName !== 'SCRIPT' && 
+               e.tagName !== 'STYLE' && 
+               e.innerText && 
+               e.innerText.includes('₹') && 
+               e.children.length === 0 &&
+               e.offsetParent !== null
+            );
+            let el = null;
+            let fHtml = null;
+            if (candidates.length > 0) {
+               el = candidates.find(c => /[0-9]/.test(c.innerText));
+               if (!el) el = candidates[0].parentElement;
+               fHtml = el ? el.outerHTML : "Not found";
+            }
+            return { 
+                text: el ? el.innerText : null,
+                fallbackHtml: fHtml
+            };
+        });
+        balanceText = res.text;
+        fallbackHtml = res.fallbackHtml;
     }
     
-    const balanceText = res.text;
+    if (fallbackHtml) {
+        log(`[DEBUG] Balance element fallback used: ${fallbackHtml}`);
+    }
+    
     if (balanceText) {
-      const balance = parseFloat(balanceText);
+      const balance = parseFloat(balanceText.replace(/[^0-9.]/g, ''));
       if (!isNaN(balance)) {
         log(`💰 Current Balance: ₹${balance.toFixed(2)}`);
         
