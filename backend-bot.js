@@ -702,6 +702,17 @@ function connectWebSocket(page, context) {
   await page.waitForTimeout(1000);
   await closePopups();
 
+  // Dismiss "Add to Desktop" banner if present
+  try {
+    const addToDesktop = page.locator('text="Add to Desktop"').first();
+    if (await addToDesktop.isVisible({ timeout: 1000 })) {
+      // Click somewhere else to dismiss, or press escape
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+      log("Dismissed 'Add to Desktop' overlay.");
+    }
+  } catch (err) {}
+
   log("Clicking on 'Win Go 30s' card...");
   try {
     const winGoCard = page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
@@ -713,6 +724,24 @@ function connectWebSocket(page, context) {
 
   await page.waitForTimeout(3000);
   await closePopups();
+
+  // Verify we actually landed on the game page by checking the URL or game elements
+  const currentUrl = page.url();
+  const hasGameElement = await page.evaluate(() => !!document.querySelector('.TimeLeft__C, .Wallet__C-balance-l1, .GameRecord__C'));
+  log(`[DEBUG] After click - URL: ${currentUrl}, hasGameElement: ${hasGameElement}`);
+  
+  if (!hasGameElement) {
+    log("⚠️ Click didn't navigate to game page. Trying direct URL...");
+    // Navigate directly to the Win Go page
+    try {
+      await page.goto("https://bdg2030.com/#/lottery/WinGo?id=1", { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.waitForTimeout(3000);
+      await closePopups();
+      log("✅ Navigated to Win Go via direct URL.");
+    } catch (err) {
+      log("❌ Direct URL navigation also failed: " + err.message);
+    }
+  }
 
   await page.screenshot({ path: "ready-to-bet.png" });
   log("✅ Bot is ready on the Win Go 30s page!");
