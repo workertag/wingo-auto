@@ -216,10 +216,25 @@ async function handleDepositFlow(page, context, balance) {
 
 async function scrapeBalance(page, context) {
   try {
-    const balanceText = await page.evaluate(() => {
-      const el = document.querySelector('.Wallet__C-balance-l1 > div');
-      return el ? el.innerText.replace(/[^0-9.]/g, '') : null;
+    const res = await page.evaluate(() => {
+      let el = document.querySelector('.Wallet__C-balance-l1 > div');
+      let fallbackHtml = null;
+      if (!el) {
+          const elements = Array.from(document.querySelectorAll('*'));
+          el = elements.find(e => e.innerText && e.innerText.includes('₹') && e.children.length === 0);
+          fallbackHtml = el ? el.outerHTML : "Not found";
+      }
+      return { 
+          text: el ? el.innerText.replace(/[^0-9.]/g, '') : null,
+          fallbackHtml
+      };
     });
+    
+    if (res.fallbackHtml) {
+        log(`[DEBUG] Balance element fallback: ${res.fallbackHtml}`);
+    }
+    
+    const balanceText = res.text;
     if (balanceText) {
       const balance = parseFloat(balanceText);
       if (!isNaN(balance)) {
