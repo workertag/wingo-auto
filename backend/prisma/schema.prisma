@@ -7,6 +7,48 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id           String            @id @default(uuid())
+  username     String            @unique
+  passwordHash String
+  role         String            @default("USER")
+  bots         BotInstance[]
+  endpoints    NetworkEndpoint[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}
+
+model NetworkEndpoint {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id])
+  name      String
+  host      String
+  port      Int
+  proxyUser String?
+  proxyPass String?
+  isActive  Boolean       @default(true)
+  bots      BotInstance[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model BotInstance {
+  id                String           @id @default(uuid())
+  userId            String
+  user              User             @relation(fields: [userId], references: [id])
+  name              String
+  endpointId        String?
+  endpoint          NetworkEndpoint? @relation(fields: [endpointId], references: [id])
+  wingoPhone        String?
+  wingoEmail        String?
+  wingoPasswordAuth String           // Encrypted
+  status            String           @default("STOPPED") // STOPPED, RUNNING, CRASHED
+  sessions          BotSession[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+}
+
 model TimeSlot {
   id        String   @id @default(uuid())
   name      String
@@ -17,31 +59,32 @@ model TimeSlot {
 }
 
 model Strategy {
-  id         String   @id @default(uuid())
-  name       String
-  minLevel   Int      @default(1)
-  maxLevel   Int      @default(7)
-  maxWins    Int?
-  maxLosses  Int?
-  levels     Int[]    // Array of bet amounts for each level
-  config     Json     // e.g. { "BET_BIG_SMALL": true, "ALLOWED_QUALITIES": ["A", "B"] }
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  minLevel  Int      @default(1)
+  maxLevel  Int      @default(7)
+  maxWins   Int?
+  maxLosses Int?
+  levels    Int[]    // Array of bet amounts for each level
+  config    Json     // e.g. { "BET_BIG_SMALL": true, "ALLOWED_QUALITIES": ["A", "B"] }
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model BotSession {
-  id             String   @id @default(uuid())
-  date           String   // e.g. "2026-09-16"
+  id             String       @id @default(uuid())
+  botInstanceId  String?
+  botInstance    BotInstance? @relation(fields: [botInstanceId], references: [id])
+  date           String       // e.g. "2026-09-16"
   timeSlotId     String?
   timeSlotName   String?
   strategyId     String?
   strategyName   String?
   initialBalance Float?
   finalBalance   Float?
-  totalWins      Int      @default(0)
-  totalLosses    Int      @default(0)
-  status         String   // ACTIVE, COMPLETED, STOP_LOSS, TAKE_PROFIT
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  totalWins      Int          @default(0)
+  totalLosses    Int          @default(0)
+  status         String       // ACTIVE, COMPLETED, STOP_LOSS, TAKE_PROFIT
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 }
-

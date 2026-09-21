@@ -10,14 +10,21 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BotsRouteImport } from './routes/bots'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ProxiesRouteImport } from './routes/proxies'
 import { Route as StrategiesRouteImport } from './routes/strategies'
 import { Route as TimeSlotsRouteImport } from './routes/time-slots'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BotsRoute = BotsRouteImport.update({
+  id: '/bots',
+  path: '/bots',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoryRoute = HistoryRouteImport.update({
@@ -28,6 +35,11 @@ const HistoryRoute = HistoryRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProxiesRoute = ProxiesRouteImport.update({
+  id: '/proxies',
+  path: '/proxies',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StrategiesRoute = StrategiesRouteImport.update({
@@ -43,38 +55,68 @@ const TimeSlotsRoute = TimeSlotsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/bots': typeof BotsRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
+  '/proxies': typeof ProxiesRoute
   '/strategies': typeof StrategiesRoute
   '/time-slots': typeof TimeSlotsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/bots': typeof BotsRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
+  '/proxies': typeof ProxiesRoute
   '/strategies': typeof StrategiesRoute
   '/time-slots': typeof TimeSlotsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/bots': typeof BotsRoute
   '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
+  '/proxies': typeof ProxiesRoute
   '/strategies': typeof StrategiesRoute
   '/time-slots': typeof TimeSlotsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/history' | '/login' | '/strategies' | '/time-slots'
+  fullPaths:
+    | '/'
+    | '/bots'
+    | '/history'
+    | '/login'
+    | '/proxies'
+    | '/strategies'
+    | '/time-slots'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/history' | '/login' | '/strategies' | '/time-slots'
-  id: '__root__' | '/' | '/history' | '/login' | '/strategies' | '/time-slots'
+  to:
+    | '/'
+    | '/bots'
+    | '/history'
+    | '/login'
+    | '/proxies'
+    | '/strategies'
+    | '/time-slots'
+  id:
+    | '__root__'
+    | '/'
+    | '/bots'
+    | '/history'
+    | '/login'
+    | '/proxies'
+    | '/strategies'
+    | '/time-slots'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BotsRoute: typeof BotsRoute
   HistoryRoute: typeof HistoryRoute
   LoginRoute: typeof LoginRoute
+  ProxiesRoute: typeof ProxiesRoute
   StrategiesRoute: typeof StrategiesRoute
   TimeSlotsRoute: typeof TimeSlotsRoute
 }
@@ -86,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bots': {
+      id: '/bots'
+      path: '/bots'
+      fullPath: '/bots'
+      preLoaderRoute: typeof BotsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/history': {
@@ -100,6 +149,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/proxies': {
+      id: '/proxies'
+      path: '/proxies'
+      fullPath: '/proxies'
+      preLoaderRoute: typeof ProxiesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/strategies': {
@@ -121,8 +177,10 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BotsRoute: BotsRoute,
   HistoryRoute: HistoryRoute,
   LoginRoute: LoginRoute,
+  ProxiesRoute: ProxiesRoute,
   StrategiesRoute: StrategiesRoute,
   TimeSlotsRoute: TimeSlotsRoute,
 }
