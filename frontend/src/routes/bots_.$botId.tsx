@@ -218,8 +218,8 @@ function BotDetailsPage() {
                        const st = strategies?.find((x: any) => x.id === sId);
                        
                        // Hack to highlight active level: scan recent logs for e.g. "L2 bet placed"
-                       const recentLog = [...logs].reverse().find(l => l.message?.includes('bet placed'));
-                       const activeMatch = recentLog?.message?.match(/L(\d+)/);
+                       const recentLog = [...logs].reverse().find(l => (l.msg || l.message || '').includes('bet placed'));
+                       const activeMatch = (recentLog?.msg || recentLog?.message || '').match(/L(\d+)/);
                        const activeLvl = activeMatch ? parseInt(activeMatch[1], 10) : null;
                        
                        return st ? (

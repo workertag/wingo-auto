@@ -28,6 +28,12 @@ function DashboardOverview() {
   });
 
   const activeBotsCount = bots.filter((b: any) => b.status === 'RUNNING').length;
+  
+  const fleetProfit = bots.reduce((acc: number, bot: any) => acc + (bot.sessionProfit || 0), 0);
+  const totalWins = bots.reduce((acc: number, bot: any) => acc + (bot.sessionWins || 0), 0);
+  const totalLosses = bots.reduce((acc: number, bot: any) => acc + (bot.sessionLosses || 0), 0);
+  const totalGames = totalWins + totalLosses;
+  const winRate = totalGames > 0 ? Math.round((totalWins / totalGames) * 100) : 0;
 
   return (
     <AppLayout>
@@ -56,7 +62,10 @@ function DashboardOverview() {
           <div className="flex justify-between items-start relative z-10">
             <div>
               <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Fleet Profit</p>
-              <h3 className="text-4xl font-black text-slate-800 mt-2">₹0<span className="text-xl text-slate-400">.00</span></h3>
+              <h3 className={`text-4xl font-black mt-2 ${fleetProfit >= 0 ? 'text-slate-800' : 'text-red-500'}`}>
+                {fleetProfit < 0 ? '-' : ''}₹{Math.abs(fleetProfit).toFixed(2).split('.')[0]}
+                <span className="text-xl opacity-50">.{Math.abs(fleetProfit).toFixed(2).split('.')[1]}</span>
+              </h3>
             </div>
             <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl">
               <IndianRupee className="w-6 h-6" />
@@ -69,7 +78,7 @@ function DashboardOverview() {
           <div className="flex justify-between items-start relative z-10">
             <div>
               <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Win Rate</p>
-              <h3 className="text-4xl font-black text-slate-800 mt-2">0<span className="text-xl text-slate-400">%</span></h3>
+              <h3 className="text-4xl font-black text-slate-800 mt-2">{winRate}<span className="text-xl text-slate-400">%</span></h3>
             </div>
             <div className="p-3 bg-violet-100 text-violet-600 rounded-xl">
               <TrendingUp className="w-6 h-6" />

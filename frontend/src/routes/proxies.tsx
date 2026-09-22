@@ -43,6 +43,20 @@ function ProxiesPage() {
     }
   });
 
+  const deleteProxyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`http://localhost:3001/api/endpoints/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to delete proxy');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['endpoints'] });
+    }
+  });
+
   return (
     <AppLayout>
       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -85,7 +99,15 @@ function ProxiesPage() {
                     </div>
                   </div>
                 </div>
-                <button className="text-slate-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
+                <button 
+                  onClick={() => {
+                    if (window.confirm("Are you sure you want to delete this proxy? Bots using this proxy will lose their connection.")) {
+                      deleteProxyMutation.mutate(proxy.id);
+                    }
+                  }}
+                  disabled={deleteProxyMutation.isPending}
+                  className="text-slate-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>

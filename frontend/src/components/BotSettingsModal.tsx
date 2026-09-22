@@ -91,43 +91,74 @@ export function BotSettingsModal({ bot, onClose }: { bot: any, onClose: () => vo
           {/* Time Slots */}
           <div>
             <h3 className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wider">Active Time Slots</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {timeSlots.map((ts: any) => (
-                <button
-                  key={ts.id}
-                  onClick={() => toggleSelection(setSelectedTimeSlots, selectedTimeSlots, ts.id)}
-                  className={`p-3 rounded-xl border text-left transition-all ${selectedTimeSlots.includes(ts.id) ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
-                >
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold text-sm">{ts.name}</span>
-                    {selectedTimeSlots.includes(ts.id) && <Check className="w-4 h-4" />}
+            
+            <div className="flex flex-wrap gap-2 mb-3">
+              {selectedTimeSlots.map(tsId => {
+                const ts = timeSlots.find((t: any) => t.id === tsId);
+                return (
+                  <div key={tsId} className="flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-medium shadow-sm">
+                    <span>{ts ? `${ts.name} (${ts.startTime}-${ts.endTime})` : tsId}</span>
+                    <button onClick={() => toggleSelection(setSelectedTimeSlots, selectedTimeSlots, tsId)} className="p-0.5 hover:bg-slate-200 rounded-md transition-colors text-slate-500">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <div className="text-xs opacity-80">{ts.startTime} - {ts.endTime}</div>
-                </button>
-              ))}
-              {timeSlots.length === 0 && <p className="text-sm text-slate-500 col-span-2">No time slots configured. Add some in settings.</p>}
+                );
+              })}
+              {selectedTimeSlots.length === 0 && <p className="text-sm text-slate-400 italic">No time slots selected.</p>}
             </div>
+
+            <select 
+              className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer font-medium appearance-none"
+              value=""
+              onChange={(e) => {
+                if (e.target.value && !selectedTimeSlots.includes(e.target.value)) {
+                  toggleSelection(setSelectedTimeSlots, selectedTimeSlots, e.target.value);
+                }
+              }}
+            >
+              <option value="" disabled>+ Add a Time Slot...</option>
+              {timeSlots.filter((ts: any) => !selectedTimeSlots.includes(ts.id)).map((ts: any) => (
+                <option key={ts.id} value={ts.id}>{ts.name} ({ts.startTime} - {ts.endTime})</option>
+              ))}
+            </select>
           </div>
 
           {/* Strategies */}
           <div>
             <h3 className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wider">Strategies</h3>
-            <div className="space-y-3">
-              {strategies.map((strat: any) => (
-                <button
-                  key={strat.id}
-                  onClick={() => toggleSelection(setSelectedStrategies, selectedStrategies, strat.id)}
-                  className={`w-full p-4 rounded-xl border text-left transition-all flex items-center justify-between ${selectedStrategies.includes(strat.id) ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
-                >
-                  <div>
-                    <div className="font-semibold">{strat.name}</div>
-                    <div className="text-xs opacity-80 mt-0.5">Levels: {strat.minLevel}-{strat.maxLevel}</div>
+            
+            <div className="flex flex-col gap-2 mb-3">
+              {selectedStrategies.map(sId => {
+                const st = strategies.find((s: any) => s.id === sId);
+                return (
+                  <div key={sId} className="flex items-center justify-between bg-amber-50 border border-amber-100 text-amber-800 px-4 py-3 rounded-xl text-sm font-medium shadow-sm">
+                    <div>
+                      <div className="font-bold">{st ? st.name : sId}</div>
+                      {st && <div className="text-xs text-amber-600/80 mt-0.5">Levels: L{st.minLevel}-L{st.maxLevel}</div>}
+                    </div>
+                    <button onClick={() => toggleSelection(setSelectedStrategies, selectedStrategies, sId)} className="p-1.5 hover:bg-amber-200/50 rounded-lg transition-colors text-amber-700">
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  {selectedStrategies.includes(strat.id) && <Check className="w-5 h-5" />}
-                </button>
-              ))}
-              {strategies.length === 0 && <p className="text-sm text-slate-500">No strategies configured.</p>}
+                );
+              })}
+              {selectedStrategies.length === 0 && <p className="text-sm text-slate-400 italic">No strategies selected.</p>}
             </div>
+
+            <select 
+              className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer font-medium appearance-none"
+              value=""
+              onChange={(e) => {
+                if (e.target.value && !selectedStrategies.includes(e.target.value)) {
+                  toggleSelection(setSelectedStrategies, selectedStrategies, e.target.value);
+                }
+              }}
+            >
+              <option value="" disabled>+ Add a Strategy...</option>
+              {strategies.filter((st: any) => !selectedStrategies.includes(st.id)).map((st: any) => (
+                <option key={st.id} value={st.id}>{st.name} (Levels {st.minLevel}-{st.maxLevel})</option>
+              ))}
+            </select>
           </div>
         </div>
 

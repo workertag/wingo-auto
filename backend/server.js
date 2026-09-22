@@ -94,8 +94,16 @@ app.post('/api/endpoints', authenticateToken, async (req, res) => {
 });
 
 app.get('/api/bots', authenticateToken, async (req, res) => {
-  const bots = await prisma.botInstance.findMany({ include: { endpoint: true } });
-  res.json(bots);
+  const bots = await prisma.botInstance.findMany({ include: { endpoint: true, betRecords: true } });
+  
+  const mappedBots = bots.map(bot => {
+    const profit = bot.betRecords.reduce((acc, bet) => acc + (bet.profit || 0), 0);
+    // Remove betRecords from payload to keep it small
+    const { betRecords, ...botData } = bot;
+    return { ...botData, sessionProfit: profit };
+  });
+  
+  res.json(mappedBots);
 });
 
 app.post('/api/bots', authenticateToken, async (req, res) => {
@@ -140,6 +148,18 @@ app.put('/api/bots/:id/settings', authenticateToken, async (req, res) => {
       data: { settings }
     });
     res.json(bot);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/bots/:id', authenticateToken, async (req, res) => {
+  try {
+    // Delete associated bet records and sessions first
+    await prisma.betRecord.deleteMany({ where: { botInstanceId: req.params.id } });
+    await prisma.botSession.deleteMany({ where: { botInstanceId: req.params.id } });
+    await prisma.botInstance.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -220,19 +240,24 @@ app.delete('/api/strategies/:id', authenticateToken, async (req, res) => {
 
 // --- ENDPOINTS (PROXIES) ---
 app.get('/api/endpoints', authenticateToken, async (req, res) => {
-  const endpoints = await prisma.endpoint.findMany();
+  const endpoints = await prisma.networkEndpoint.findMany();
   res.json(endpoints);
 });
 app.post('/api/endpoints', authenticateToken, async (req, res) => {
-  const ep = await prisma.endpoint.create({ data: req.body });
+  const ep = await prisma.networkEndpoint.create({ data: req.body });
   res.json(ep);
 });
 app.put('/api/endpoints/:id', authenticateToken, async (req, res) => {
-  const ep = await prisma.endpoint.update({ where: { id: req.params.id }, data: req.body });
+  const ep = await prisma.networkEndpoint.update({ where: { id: req.params.id }, data: req.body });
   res.json(ep);
 });
 app.delete('/api/endpoints/:id', authenticateToken, async (req, res) => {
-  await prisma.endpoint.delete({ where: { id: req.params.id } });
+  // Unlink from bots before deleting
+  await prisma.botInstance.updateMany({
+    where: { endpointId: req.params.id },
+    data: { endpointId: null }
+  });
+  await prisma.networkEndpoint.delete({ where: { id: req.params.id } });
   res.json({ success: true });
 });
 

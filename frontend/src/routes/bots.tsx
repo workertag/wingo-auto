@@ -1,8 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bot, Plus, Play, Square, Settings, Wifi } from 'lucide-react';
+import { Bot, Plus, Settings, Play, Square, Activity, IndianRupee, ShieldCheck, TrendingUp, Wifi, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
 import { api } from '../lib/api';
 import { AppLayout } from '../components/Layout';
 import { BotSettingsModal } from '../components/BotSettingsModal';
@@ -59,6 +58,20 @@ function BotsPage() {
     }
   });
 
+  const deleteBotMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`http://localhost:3001/api/bots/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to delete bot');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bots'] });
+    }
+  });
+
   const controlBotMutation = useMutation({
     mutationFn: async ({ id, action }: { id: string, action: 'start' | 'stop' }) => {
       setLoadingBots(prev => ({ ...prev, [id]: true }));
@@ -105,7 +118,7 @@ function BotsPage() {
             <div 
               key={bot.id} 
               onClick={() => navigate({ to: `/bots/${bot.id}` })}
-              className="glass-card rounded-2xl overflow-hidden shadow-xl shadow-slate-200/50 border border-slate-200/60 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+              className="glass-card rounded-2xl overflow-hidden shadow-xl shadow-slate-200/50 border border-slate-200/60 hover:-translate-y-1 transition-all duration-300 cursor-pointer group"
             >
               <div className="p-6 border-b border-slate-100 bg-white/40">
                 <div className="flex justify-between items-start">
@@ -128,25 +141,41 @@ function BotsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${bot.status === 'RUNNING' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {bot.status === 'RUNNING' && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>}
-                    <span>{bot.status}</span>
+                  <div className="flex items-center space-x-2">
+                    <div className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${bot.status === 'RUNNING' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {bot.status === 'RUNNING' && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>}
+                      <span>{bot.status}</span>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm("Are you sure you want to delete this bot? This action cannot be undone.")) {
+                          deleteBotMutation.mutate(bot.id);
+                        }
+                      }}
+                      disabled={deleteBotMutation.isPending}
+                      className="p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </div>
               
               <div className="p-6 bg-white/60">
-                <div className="grid grid-cols-2 gap-4 mb-6">
+                 <div className="grid grid-cols-2 gap-4 mb-6">
                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Session Profit</p>
-                      <p className="text-xl font-black text-slate-800 mt-1">₹0.00</p>
+                      <p className={`text-xl font-black mt-1 ${(bot.sessionProfit || 0) >= 0 ? 'text-slate-800' : 'text-red-500'}`}>
+                        {(bot.sessionProfit || 0) < 0 ? '-' : ''}₹{Math.abs(bot.sessionProfit || 0).toFixed(2)}
+                      </p>
                    </div>
                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Wins / Losses</p>
                       <p className="text-xl font-black text-slate-800 mt-1">
-                         <span className="text-emerald-500">0</span>
+                         <span className="text-emerald-500">{bot.sessionWins || 0}</span>
                          <span className="text-slate-300 mx-2">/</span>
-                         <span className="text-red-500">0</span>
+                         <span className="text-red-500">{bot.sessionLosses || 0}</span>
                       </p>
                    </div>
                 </div>
