@@ -44,9 +44,27 @@ model BotInstance {
   wingoEmail        String?
   wingoPasswordAuth String           // Encrypted
   status            String           @default("STOPPED") // STOPPED, RUNNING, CRASHED
+  settings          Json?            // { games: [], timeSlots: [], strategies: [] }
+  currentBalance    Float            @default(0)
+  sessionWins       Int              @default(0)
+  sessionLosses     Int              @default(0)
   sessions          BotSession[]
+  betRecords        BetRecord[]
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
+}
+
+model BetRecord {
+  id            String       @id @default(uuid())
+  botInstanceId String
+  botInstance   BotInstance  @relation(fields: [botInstanceId], references: [id])
+  issue         String
+  betType       String       // e.g. "BIG", "SMALL", "RED", "GREEN"
+  amount        Float
+  status        String       @default("PENDING") // PENDING, WON, LOST
+  profit        Float?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 }
 
 model TimeSlot {

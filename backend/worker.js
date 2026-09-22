@@ -22,12 +22,16 @@ const worker = new Worker('bot-commands', async job => {
       return;
     }
     
+    // Lock it immediately to prevent race conditions
+    activeBots.set(botId, 'STARTING');
+    
     const botInstance = await prisma.botInstance.findUnique({
       where: { id: botId },
       include: { endpoint: true }
     });
 
     if (!botInstance) {
+      activeBots.delete(botId);
       throw new Error(`BotInstance ${botId} not found`);
     }
 
@@ -36,7 +40,14 @@ const worker = new Worker('bot-commands', async job => {
     activeBots.set(botId, bot);
     
     // Run asynchronously
-    bot.start().catch(err => console.error(`Bot ${botId} crashed:`, err));
+    bot.start()
+      .catch(err => console.error(`Bot ${botId} crashed:`, err))
+      .finally(() => {
+        // If it stopped or crashed, remove from active memory
+        if (!bot.isRunning) {
+          activeBots.delete(botId);
+        }
+      });
   }
   
   if (action === 'STOP_BOT') {
@@ -46,7 +57,11 @@ const worker = new Worker('bot-commands', async job => {
       await bot.stop();
       activeBots.delete(botId);
     } else {
-      console.log(`Bot ${botId} not found on this worker.`);
+      console.log(`Bot ${botId} not found on this worker. Forcing DB status to STOPPED.`);
+      await prisma.botInstance.update({
+        where: { id: botId },
+        data: { status: 'STOPPED' }
+      }).catch(() => {});
     }
   }
 }, { connection });

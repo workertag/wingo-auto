@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Activity, Bot, TrendingUp, IndianRupee, ShieldCheck } from 'lucide-react';
 import { useBotStream, useBotStreamStore } from '../hooks/useBotStream';
-import { useAuthStore } from '../stores/authStore';
+import { api } from '../lib/api';
 import { AppLayout } from '../components/Layout';
 
 export const Route = createFileRoute('/')({
@@ -10,7 +10,7 @@ export const Route = createFileRoute('/')({
 });
 
 function DashboardOverview() {
-  const token = useAuthStore((state) => state.token);
+  const token = api.getToken();
   useBotStream(); // Mount the SSE connection
   
   const events = useBotStreamStore(state => state.events);

@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Server, Plus, Trash2, CheckCircle2, XCircle } from 'lucide-react';
 import { useState } from 'react';
-import { useAuthStore } from '../stores/authStore';
+import { api } from '../lib/api';
 import { AppLayout } from '../components/Layout';
 
 export const Route = createFileRoute('/proxies')({
@@ -10,7 +10,7 @@ export const Route = createFileRoute('/proxies')({
 });
 
 function ProxiesPage() {
-  const token = useAuthStore((state) => state.token);
+  const token = api.getToken();
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newProxy, setNewProxy] = useState({ name: '', host: '', port: '', proxyUser: '', proxyPass: '' });
@@ -182,7 +182,7 @@ function ProxiesPage() {
                 Cancel
               </button>
               <button
-                onClick={() => addProxyMutation.mutate(newProxy)}
+                onClick={() => addProxyMutation.mutate({ ...newProxy, userId: '1' })}
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl shadow-lg shadow-indigo-500/30 transition-colors"
                 disabled={addProxyMutation.isPending}
               >

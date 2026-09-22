@@ -25,28 +25,56 @@ class PlaywrightBot {
     this.pendingBets = [];
     this.sessionWins = 0;
     this.sessionLosses = 0;
+    
+    // Bind the listener so we can remove it later
+    this.onMessageListener = async (channel, message) => {
+      if (channel === 'wingo:predictions' && this.isRunning) {
+        const predictionData = JSON.parse(message);
+        await this.onPrediction(predictionData);
+      }
+    };
   }
 
   log(msg) {
     const ts = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }) + " IST";
     console.log(`[Bot:${this.botId}] [${ts}] ${msg}`);
-    this.pub.publish('bot-events', JSON.stringify({ botId: this.botId, type: 'LOG', msg, ts }));
+    const payload = { botId: this.botId, type: 'LOG', msg, ts };
+    this.pub.publish('bot-events', JSON.stringify(payload));
+    this.pub.lpush(`wingo:logs:${this.botId}`, JSON.stringify(payload));
+    this.pub.ltrim(`wingo:logs:${this.botId}`, 0, 99);
   }
 
   publishEvent(type, data) {
-    this.pub.publish('bot-events', JSON.stringify({ botId: this.botId, type, data, ts: Date.now() }));
+    const payload = { botId: this.botId, type, data, ts: Date.now() };
+    this.pub.publish('bot-events', JSON.stringify(payload));
+    if (['BOT_STARTED', 'BOT_STOPPED', 'BOT_ERROR', 'BALANCE_UPDATE', 'BET_RESOLVED'].includes(type)) {
+      this.pub.lpush(`wingo:logs:${this.botId}`, JSON.stringify(payload));
+      this.pub.ltrim(`wingo:logs:${this.botId}`, 0, 99);
+    }
   }
 
   async start() {
     this.isRunning = true;
     try {
+      // Clear previous session logs and bets
+      await this.pub.del(`bot:${this.botId}:logs`).catch(() => {});
+      await this.prisma.betRecord.deleteMany({ where: { botInstanceId: this.botId } }).catch(() => {});
+      await this.prisma.botInstance.update({ 
+        where: { id: this.botId }, 
+        data: { sessionWins: 0, sessionLosses: 0 } 
+      }).catch(() => {});
+      
       this.log("Starting browser...");
       let launchOptions = {
         headless: process.env.HEADLESS !== 'false',
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disk-cache-size=1", "--disable-dev-shm-usage"],
       };
 
-      let contextOptions = {};
+      let contextOptions = {
+        viewport: { width: 375, height: 812 },
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1",
+      };
+      
       if (this.endpoint && this.endpoint.isActive) {
         let proxyServer = `http://${this.endpoint.host}:${this.endpoint.port}`;
         contextOptions.proxy = {
@@ -71,12 +99,7 @@ class PlaywrightBot {
         else this.log("Subscribed to prediction events.");
       });
 
-      this.sub.on('message', async (channel, message) => {
-        if (channel === 'wingo:predictions' && this.isRunning) {
-          const predictionData = JSON.parse(message);
-          await this.onPrediction(predictionData);
-        }
-      });
+      this.sub.on('message', this.onMessageListener);
       
       this.publishEvent('BOT_STARTED', { status: 'RUNNING' });
       await this.prisma.botInstance.update({ where: { id: this.botId }, data: { status: 'RUNNING' } });
@@ -92,7 +115,7 @@ class PlaywrightBot {
     this.isRunning = false;
     this.log("Stopping bot...");
     try {
-      this.sub.unsubscribe('wingo:predictions');
+      this.sub.removeListener('message', this.onMessageListener);
       if (this.browser) await this.browser.close();
       await this.prisma.botInstance.update({ where: { id: this.botId }, data: { status: 'STOPPED' } });
       this.publishEvent('BOT_STOPPED', { status: 'STOPPED' });
@@ -129,45 +152,306 @@ class PlaywrightBot {
     this.log("Waiting for login response...");
     await this.page.waitForTimeout(5000);
     
+    await this.closePopups();
+
     // Attempt navigation to game
     try {
       await this.page.goto("https://bdg2030.com/#/home", { waitUntil: "domcontentloaded" }).catch(() => {});
       await this.page.waitForTimeout(2000);
+      await this.closePopups();
+
+      let navigatedToGame = false;
       const winGoCard = this.page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
-      if (await winGoCard.isVisible({ timeout: 5000 })) {
-        await winGoCard.click();
+      
+      if (await winGoCard.isVisible({ timeout: 3000 })) {
+        await winGoCard.evaluate(el => el.click());
+        this.log("Clicked 'Win Go 30s' directly.");
+        await this.page.waitForTimeout(3000);
+        await this.closePopups();
+        navigatedToGame = await this.page.evaluate(() => !!document.querySelector('.TimeLeft__C, .Wallet__C-balance-l1, .GameRecord__C'));
+      }
+      
+      if (!navigatedToGame) {
+        this.log("⚠️ Direct Win Go card not found or click failed. Trying Lottery category first...");
+        try {
+          const lotteryCard = this.page.locator('text="Lottery"').first();
+          if (await lotteryCard.isVisible({ timeout: 2000 })) {
+            await lotteryCard.evaluate(el => el.click());
+            this.log("Clicked 'Lottery' category.");
+            await this.page.waitForTimeout(2000);
+            await this.closePopups();
+            
+            const winGoCard2 = this.page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
+            if (await winGoCard2.isVisible({ timeout: 3000 })) {
+              await winGoCard2.evaluate(el => el.click());
+              this.log("Clicked 'Win Go 30s' from Lottery page.");
+              await this.page.waitForTimeout(3000);
+              await this.closePopups();
+              navigatedToGame = await this.page.evaluate(() => !!document.querySelector('.TimeLeft__C, .Wallet__C-balance-l1, .GameRecord__C'));
+            }
+          }
+        } catch (err) { }
+      }
+
+      if (navigatedToGame) {
         this.log("Successfully entered Win Go 30s.");
+        await this.page.waitForTimeout(2000);
+        await this.scrapeBalance();
       } else {
-         this.log("Could not find Win Go 30s card.");
+         this.log("Could not navigate to Win Go 30s.");
       }
     } catch (e) {
        this.log("Error navigating to game: " + e.message);
     }
   }
 
+  async closePopups() {
+    try {
+      const confirmBtn = this.page.locator(".announcement-dialog__button").first();
+      if (await confirmBtn.isVisible({ timeout: 1000 })) {
+        await confirmBtn.click();
+        this.log("Closed announcement popup.");
+        await this.page.waitForTimeout(1000);
+      }
+    } catch (err) {}
+    try {
+      const dismissBtn = this.page.locator('text="Don\'t log in yet, continue browsing"').first();
+      if (await dismissBtn.isVisible({ timeout: 1000 })) {
+        await dismissBtn.click();
+        this.log("Dismissed Event Rewards popup.");
+        await this.page.waitForTimeout(1000);
+      }
+    } catch (err) {}
+    try {
+      const firstRechargeClose = this.page.locator(".first-recharge-queue-dialog__close").first();
+      if (await firstRechargeClose.isVisible({ timeout: 1000 })) {
+        await firstRechargeClose.click();
+        this.log("Closed First Deposit Bonus popup.");
+        await this.page.waitForTimeout(1000);
+      }
+    } catch (err) {}
+  }
+
+  async scrapeBalance() {
+    try {
+      let balanceText = null;
+      let attempts = 0;
+      
+      while (attempts < 20) {
+          balanceText = await this.page.evaluate(() => {
+              const el = document.querySelector('.Wallet__C-balance-l1');
+              return el ? el.innerText : null;
+          });
+          
+          if (balanceText && balanceText.includes('₹')) {
+              break;
+          }
+          await this.page.waitForTimeout(1000);
+          attempts++;
+      }
+      
+      if (balanceText) {
+        const cleaned = balanceText.replace(/[^0-9.]/g, '');
+        const balance = parseFloat(cleaned);
+        if (!isNaN(balance)) {
+          this.currentBalance = balance;
+          this.log(`💰 Current Balance: ₹${balance.toFixed(2)}`);
+          this.publishEvent('BALANCE_UPDATE', { balance });
+          this.prisma.botInstance.update({
+            where: { id: this.botId },
+            data: { currentBalance: parseFloat(balance) }
+          }).catch(() => {});
+        }
+      }
+    } catch (err) {
+      this.log(`⚠️ Could not scrape balance: ${err.message}`);
+    }
+  }
+
+  getBetQuantity(level) {
+    return 1 * Math.pow(2, (level || 1) - 1);
+  }
+
+  async placeBet(selector, label, level, issue) {
+    try {
+      const quantity = this.getBetQuantity(level);
+      this.log(`  Clicking ${label} button (Level ${level}, Qty ${quantity})...`);
+
+      const btn = this.page.locator(selector).first();
+      await btn.evaluate(node => node.click());
+      await this.page.waitForTimeout(300); // Wait for popup animation
+      this.log(`  Popup opened.`);
+
+      if (quantity > 1) {
+        await this.page.evaluate((qty) => {
+          const inputs = Array.from(document.querySelectorAll('.multiplier-section input[type="number"]'));
+          const visibleInput = inputs.find(b => b.offsetWidth > 0 || b.offsetHeight > 0 || b.getClientRects().length > 0);
+          if (visibleInput) {
+            const nativeSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLInputElement.prototype, 'value'
+            ).set;
+            nativeSetter.call(visibleInput, qty);
+            visibleInput.dispatchEvent(new Event('input', { bubbles: true }));
+            visibleInput.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }, String(quantity));
+        this.log(`  Set quantity to ${quantity}`);
+        await this.page.waitForTimeout(500);
+      }
+
+      this.log(`  Confirming bet...`);
+      await this.page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('.lottery-container button.bet-amount'));
+        const visibleBtn = btns.find(b => b.offsetWidth > 0 || b.offsetHeight > 0 || b.getClientRects().length > 0);
+        if (visibleBtn) visibleBtn.click();
+      });
+      
+      await this.page.waitForTimeout(400);
+
+      this.log(`  ✅ ${label} L${level} bet placed — ₹${quantity}.00`);
+      if (issue) {
+        this.pendingBets.push({ issue, betType: label, betQuantity: quantity, level });
+        
+        // Save to DB asynchronously
+        this.prisma.betRecord.create({
+          data: {
+            botInstanceId: this.botId,
+            issue: issue,
+            betType: label,
+            amount: Number(quantity)
+          }
+        }).catch(err => console.error('Failed to save BetRecord:', err));
+      }
+      return true;
+    } catch (err) {
+      this.log(`  ❌ Failed to place ${label} bet: ${err.message}`);
+      return false;
+    }
+  }
+
   async onPrediction(predictionData) {
     if (!this.isRunning) return;
     
-    const { pending, state, results } = predictionData;
-    this.log(`Received prediction for issue ${pending.issue}`);
-    
-    // 1. Resolve past bets if results exist
-    if (results && this.pendingBets.length > 0) {
-        // Logic similar to old backend-bot.js would go here
-        this.pendingBets = [];
-        this.log("Resolved past bets.");
+    try {
+      const { pending, state, results, issue } = predictionData;
+      const currentIssue = pending?.issue || issue;
+      if (!currentIssue) return;
+
+      this.log(`📊 Prediction for issue ${currentIssue}:`);
+      
+      const bsLevel = state?.bsLevel || 1;
+      const rgLevel = state?.rgLevel || 1;
+      
+      if (pending) {
+        this.log(`   BS: ${pending.bsPred || "NO SIGNAL"} (Quality: ${pending.bsQuality}, Level: L${bsLevel})`);
+        this.log(`   RG: ${pending.rgPred || "NO SIGNAL"} (Quality: ${pending.rgQuality}, Level: L${rgLevel})`);
+      }
+      
+      // 1. Resolve past bets if results exist
+      if (results && this.pendingBets.length > 0) {
+          const resultsMap = {};
+          results.forEach(r => { resultsMap[r.issue] = r.num; }); // API returns num, not number
+          
+          const remainingBets = [];
+          for (const bet of this.pendingBets) {
+            if (resultsMap[bet.issue] !== undefined) {
+              const winningNum = resultsMap[bet.issue];
+              const isSmall = winningNum >= 0 && winningNum <= 4;
+              const isBig = winningNum >= 5 && winningNum <= 9;
+              const isRed = [2,4,6,8,0].includes(winningNum); // 0 is RedViolet
+              const isGreen = [1,3,5,7,9].includes(winningNum); // 5 is GreenViolet
+              const b = bet.betType;
+              
+              let won = false;
+              let amount = 0;
+              if (b === "BIG" && isBig) won = true;
+              else if (b === "SMALL" && isSmall) won = true;
+              else if (b === "RED" && isRed) won = true;
+              else if (b === "GREEN" && isGreen) won = true;
+              
+              let profit = 0;
+              if (won) {
+                if (b === "RED" || b === "GREEN") {
+                  if (winningNum === 0 || winningNum === 5) {
+                    amount = bet.betQuantity * 1.47;
+                  } else {
+                    amount = bet.betQuantity * 1.96;
+                  }
+                } else {
+                  amount = bet.betQuantity * 1.96;
+                }
+                profit = amount - bet.betQuantity;
+              } else {
+                amount = -bet.betQuantity;
+                profit = -bet.betQuantity;
+              }
+              
+              this.log(`🎯 Bet on ${b} for ${bet.issue} resolved: ${won ? 'WON' : 'LOST'} (Winning Num: ${winningNum}, Net Profit: ₹${profit.toFixed(2)})`);
+              
+              this.publishEvent('BET_RESOLVED', { won, amount: profit, issue: bet.issue, betType: b });
+
+              // Sync frontend balance via DB increment approximation
+              // since real balance scraping is expensive and async
+              this.currentBalance = (this.currentBalance || 0) + profit;
+              this.publishEvent('BALANCE_UPDATE', { balance: parseFloat(this.currentBalance.toFixed(2)) });
+
+              // Update DB asynchronously
+              this.prisma.betRecord.updateMany({
+                where: { botInstanceId: this.botId, issue: bet.issue, betType: b },
+                data: { status: won ? 'WON' : 'LOST', profit }
+              }).catch(() => {});
+
+              this.prisma.botInstance.update({
+                where: { id: this.botId },
+                data: {
+                  sessionWins: { increment: won ? 1 : 0 },
+                  sessionLosses: { increment: won ? 0 : 1 },
+                  currentBalance: { increment: profit } // approximate, will be synced by real balance check
+                }
+              }).catch(() => {});
+            } else {
+              remainingBets.push(bet);
+            }
+          }
+          this.pendingBets = remainingBets;
+      }
+
+      if (!currentIssue || !pending) return;
+
+      // 2. Add randomized jitter between 500ms and 2500ms to avoid exact sync with other bots
+      const delay = Math.floor(Math.random() * 2000) + 500;
+      this.log(`Waiting ${delay}ms before placing bet...`);
+      await this.page.waitForTimeout(delay);
+      
+      // 3. Place bet based on Strategy
+      // Since strategy settings from DB are complex, we will just use basic logic for now.
+      // If there's a Big/Small prediction, place it.
+      if (pending.bsPred) {
+        const selector = pending.bsPred === "BIG" ? ".Betting__C-foot-b" : ".Betting__C-foot-s";
+        await this.placeBet(selector, pending.bsPred, bsLevel, currentIssue);
+      }
+      if (pending.rgPred) {
+        let selector;
+        switch (pending.rgPred) {
+          case "RED":    selector = ".Betting__C-head-red"; break;
+          case "GREEN":  selector = ".Betting__C-head-green"; break;
+          case "VIOLET": selector = ".Betting__C-head-violet"; break;
+        }
+        if (selector) {
+           await this.placeBet(selector, pending.rgPred, rgLevel, currentIssue);
+        }
+      }
+      
+    } catch (e) {
+      if (this.isRunning) {
+        this.log(`Error during prediction handling: ${e.message}`);
+      }
+    } finally {
+      if (this.isRunning) {
+        await this.page.waitForTimeout(1000);
+        await this.scrapeBalance();
+      }
     }
-
-    if (!pending) return;
-
-    // 2. Add randomized jitter between 500ms and 2500ms to avoid exact sync with other bots
-    const delay = Math.floor(Math.random() * 2000) + 500;
-    this.log(`Waiting ${delay}ms before placing bet...`);
-    await this.page.waitForTimeout(delay);
-    
-    // 3. Place bet based on Strategy (Assuming Strategy is loaded from DB)
-    // Detailed logic from backend-bot.js omitted for brevity but would execute click here
-    this.log("Bet logic executed.");
   }
 }
 

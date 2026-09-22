@@ -2,17 +2,22 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bot, Plus, Play, Square, Settings, Wifi } from 'lucide-react';
 import { useState } from 'react';
-import { useAuthStore } from '../stores/authStore';
+import { useNavigate } from '@tanstack/react-router';
+import { api } from '../lib/api';
 import { AppLayout } from '../components/Layout';
+import { BotSettingsModal } from '../components/BotSettingsModal';
 
 export const Route = createFileRoute('/bots')({
   component: BotsPage,
 });
 
 function BotsPage() {
-  const token = useAuthStore((state) => state.token);
+  const token = api.getToken();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedBotForSettings, setSelectedBotForSettings] = useState<any>(null);
+  const [loadingBots, setLoadingBots] = useState<Record<string, boolean>>({});
   const [newBot, setNewBot] = useState({ name: '', wingoPhone: '', wingoPassword: '', endpointId: '' });
 
   const { data: bots = [], isLoading } = useQuery({
@@ -38,32 +43,40 @@ function BotsPage() {
 
   const addBotMutation = useMutation({
     mutationFn: async (botData: any) => {
-      const res = await fetch('http://localhost:3001/api/bots', {
+      const res = await api.request('/bots', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(botData)
       });
-      if (!res.ok) throw new Error('Failed to add bot');
-      return res.json();
+      return res;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bots'] });
       setShowAddModal(false);
       setNewBot({ name: '', wingoPhone: '', wingoPassword: '', endpointId: '' });
+    },
+    onError: (error: any) => {
+      alert(error.message);
     }
   });
 
   const controlBotMutation = useMutation({
     mutationFn: async ({ id, action }: { id: string, action: 'start' | 'stop' }) => {
+      setLoadingBots(prev => ({ ...prev, [id]: true }));
       const res = await fetch(`http://localhost:3001/api/bots/${id}/${action}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error(`Failed to ${action} bot`);
-      return res.json();
+      return { id, action, data: await res.json() };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['bots'] });
+      // In a real app we'd wait for SSE to confirm RUNNING, but for immediate UX:
+      setTimeout(() => setLoadingBots(prev => ({ ...prev, [result.id]: false })), 1000);
+    },
+    onError: (err, variables) => {
+      setLoadingBots(prev => ({ ...prev, [variables.id]: false }));
+      alert(err.message);
     }
   });
 
@@ -89,7 +102,11 @@ function BotsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {bots.map((bot: any) => (
-            <div key={bot.id} className="glass-card rounded-2xl overflow-hidden shadow-xl shadow-slate-200/50 border border-slate-200/60 hover:-translate-y-1 transition-all duration-300">
+            <div 
+              key={bot.id} 
+              onClick={() => navigate({ to: `/bots/${bot.id}` })}
+              className="glass-card rounded-2xl overflow-hidden shadow-xl shadow-slate-200/50 border border-slate-200/60 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+            >
               <div className="p-6 border-b border-slate-100 bg-white/40">
                 <div className="flex justify-between items-start">
                   <div className="flex items-center space-x-4">
@@ -137,22 +154,39 @@ function BotsPage() {
                 <div className="flex space-x-3">
                   {bot.status !== 'RUNNING' ? (
                     <button 
-                      onClick={() => controlBotMutation.mutate({ id: bot.id, action: 'start' })}
-                      className="flex-1 flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2.5 rounded-xl transition-colors shadow-lg shadow-emerald-500/20"
+                      onClick={(e) => { e.stopPropagation(); controlBotMutation.mutate({ id: bot.id, action: 'start' }); }}
+                      disabled={loadingBots[bot.id]}
+                      className="flex-1 flex items-center justify-center space-x-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-400 text-white font-semibold py-2.5 rounded-xl transition-colors shadow-lg shadow-emerald-500/20"
                     >
-                      <Play className="w-4 h-4 fill-current" />
-                      <span>Start Bot</span>
+                      {loadingBots[bot.id] ? (
+                        <span>Queued...</span>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4 fill-current" />
+                          <span>Start Bot</span>
+                        </>
+                      )}
                     </button>
                   ) : (
                     <button 
-                      onClick={() => controlBotMutation.mutate({ id: bot.id, action: 'stop' })}
-                      className="flex-1 flex items-center justify-center space-x-2 bg-red-500 hover:bg-red-600 text-white font-semibold py-2.5 rounded-xl transition-colors shadow-lg shadow-red-500/20"
+                      onClick={(e) => { e.stopPropagation(); controlBotMutation.mutate({ id: bot.id, action: 'stop' }); }}
+                      disabled={loadingBots[bot.id]}
+                      className="flex-1 flex items-center justify-center space-x-2 bg-red-500 hover:bg-red-600 disabled:bg-red-400 text-white font-semibold py-2.5 rounded-xl transition-colors shadow-lg shadow-red-500/20"
                     >
-                      <Square className="w-4 h-4 fill-current" />
-                      <span>Stop Bot</span>
+                      {loadingBots[bot.id] ? (
+                        <span>Stopping...</span>
+                      ) : (
+                        <>
+                          <Square className="w-4 h-4 fill-current" />
+                          <span>Stop Bot</span>
+                        </>
+                      )}
                     </button>
                   )}
-                  <button className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-colors">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setSelectedBotForSettings(bot); }}
+                    className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-colors"
+                  >
                     <Settings className="w-5 h-5" />
                   </button>
                 </div>
@@ -241,6 +275,13 @@ function BotsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedBotForSettings && (
+        <BotSettingsModal 
+          bot={selectedBotForSettings} 
+          onClose={() => setSelectedBotForSettings(null)} 
+        />
       )}
     </div>
     </AppLayout>

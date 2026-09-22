@@ -87,6 +87,14 @@ export const api = {
     return this.request('/bot-sessions');
   },
 
+  getBotInstanceLogs(id: string) {
+    return this.request(`/bots/${id}/logs`);
+  },
+
+  getBotInstanceHistory(id: string) {
+    return this.request(`/bots/${id}/history`);
+  },
+
   // Time Slots
   getTimeSlots() {
     return this.request('/time-slots');

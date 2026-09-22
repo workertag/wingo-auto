@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProxiesRouteImport } from './routes/proxies'
 import { Route as StrategiesRouteImport } from './routes/strategies'
 import { Route as TimeSlotsRouteImport } from './routes/time-slots'
+import { Route as BotsBotIdRouteImport } from './routes/bots_.$botId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -52,6 +53,11 @@ const TimeSlotsRoute = TimeSlotsRouteImport.update({
   path: '/time-slots',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BotsBotIdRoute = BotsBotIdRouteImport.update({
+  id: '/bots_/$botId',
+  path: '/bots/$botId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -61,6 +67,7 @@ export interface FileRoutesByFullPath {
   '/proxies': typeof ProxiesRoute
   '/strategies': typeof StrategiesRoute
   '/time-slots': typeof TimeSlotsRoute
+  '/bots/$botId': typeof BotsBotIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -70,6 +77,7 @@ export interface FileRoutesByTo {
   '/proxies': typeof ProxiesRoute
   '/strategies': typeof StrategiesRoute
   '/time-slots': typeof TimeSlotsRoute
+  '/bots/$botId': typeof BotsBotIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -80,6 +88,7 @@ export interface FileRoutesById {
   '/proxies': typeof ProxiesRoute
   '/strategies': typeof StrategiesRoute
   '/time-slots': typeof TimeSlotsRoute
+  '/bots_/$botId': typeof BotsBotIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,6 +100,7 @@ export interface FileRouteTypes {
     | '/proxies'
     | '/strategies'
     | '/time-slots'
+    | '/bots/$botId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -100,6 +110,7 @@ export interface FileRouteTypes {
     | '/proxies'
     | '/strategies'
     | '/time-slots'
+    | '/bots/$botId'
   id:
     | '__root__'
     | '/'
@@ -109,6 +120,7 @@ export interface FileRouteTypes {
     | '/proxies'
     | '/strategies'
     | '/time-slots'
+    | '/bots_/$botId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -119,6 +131,7 @@ export interface RootRouteChildren {
   ProxiesRoute: typeof ProxiesRoute
   StrategiesRoute: typeof StrategiesRoute
   TimeSlotsRoute: typeof TimeSlotsRoute
+  BotsBotIdRoute: typeof BotsBotIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -172,6 +185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TimeSlotsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/bots_/$botId': {
+      id: '/bots_/$botId'
+      path: '/bots/$botId'
+      fullPath: '/bots/$botId'
+      preLoaderRoute: typeof BotsBotIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -183,6 +203,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProxiesRoute: ProxiesRoute,
   StrategiesRoute: StrategiesRoute,
   TimeSlotsRoute: TimeSlotsRoute,
+  BotsBotIdRoute: BotsBotIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
