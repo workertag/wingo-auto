@@ -7,14 +7,21 @@ export function BotSettingsModal({ bot, onClose }: { bot: any, onClose: () => vo
   const queryClient = useQueryClient();
 
   const [selectedGames, setSelectedGames] = useState<string[]>([]);
-  const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>([]);
-  const [selectedStrategies, setSelectedStrategies] = useState<string[]>([]);
+  const [schedules, setSchedules] = useState<{ id: string, timeSlotId: string, strategyId: string }[]>([]);
 
   useEffect(() => {
     if (bot.settings) {
       if (bot.settings.games) setSelectedGames(bot.settings.games);
-      if (bot.settings.timeSlots) setSelectedTimeSlots(bot.settings.timeSlots);
-      if (bot.settings.strategies) setSelectedStrategies(bot.settings.strategies);
+      if (bot.settings.schedules) {
+        setSchedules(bot.settings.schedules);
+      } else {
+        // Fallback for legacy data (attempt to match the first time slot and strategy)
+        const ts = bot.settings.timeSlots?.[0];
+        const st = bot.settings.strategies?.[0];
+        if (ts && st) {
+          setSchedules([{ id: Date.now().toString(), timeSlotId: ts, strategyId: st }]);
+        }
+      }
     }
   }, [bot.settings]);
 
@@ -49,13 +56,19 @@ export function BotSettingsModal({ bot, onClose }: { bot: any, onClose: () => vo
     }
   });
 
-  const toggleSelection = (setter: any, current: string[], value: string) => {
-    if (current.includes(value)) {
-      setter(current.filter(i => i !== value));
-    } else {
-      setter([...current, value]);
-    }
+  const addSchedule = () => {
+    setSchedules([...schedules, { id: Date.now().toString(), timeSlotId: '', strategyId: '' }]);
   };
+
+  const removeSchedule = (id: string) => {
+    setSchedules(schedules.filter(s => s.id !== id));
+  };
+
+  const updateSchedule = (id: string, field: 'timeSlotId' | 'strategyId', value: string) => {
+    setSchedules(schedules.map(s => s.id === id ? { ...s, [field]: value } : s));
+  };
+
+  const hasInvalidSchedule = schedules.some(s => !s.timeSlotId || !s.strategyId);
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -88,77 +101,66 @@ export function BotSettingsModal({ bot, onClose }: { bot: any, onClose: () => vo
             </div>
           </div>
 
-          {/* Time Slots */}
+          {/* Schedules */}
           <div>
-            <h3 className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wider">Active Time Slots</h3>
-            
-            <div className="flex flex-wrap gap-2 mb-3">
-              {selectedTimeSlots.map(tsId => {
-                const ts = timeSlots.find((t: any) => t.id === tsId);
-                return (
-                  <div key={tsId} className="flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-medium shadow-sm">
-                    <span>{ts ? `${ts.name} (${ts.startTime}-${ts.endTime})` : tsId}</span>
-                    <button onClick={() => toggleSelection(setSelectedTimeSlots, selectedTimeSlots, tsId)} className="p-0.5 hover:bg-slate-200 rounded-md transition-colors text-slate-500">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                );
-              })}
-              {selectedTimeSlots.length === 0 && <p className="text-sm text-slate-400 italic">No time slots selected.</p>}
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Schedules</h3>
+              <button 
+                onClick={addSchedule}
+                className="text-indigo-600 hover:text-indigo-700 text-sm font-bold flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                + Add Schedule
+              </button>
             </div>
-
-            <select 
-              className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer font-medium appearance-none"
-              value=""
-              onChange={(e) => {
-                if (e.target.value && !selectedTimeSlots.includes(e.target.value)) {
-                  toggleSelection(setSelectedTimeSlots, selectedTimeSlots, e.target.value);
-                }
-              }}
-            >
-              <option value="" disabled>+ Add a Time Slot...</option>
-              {timeSlots.filter((ts: any) => !selectedTimeSlots.includes(ts.id)).map((ts: any) => (
-                <option key={ts.id} value={ts.id}>{ts.name} ({ts.startTime} - {ts.endTime})</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Strategies */}
-          <div>
-            <h3 className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wider">Strategies</h3>
             
-            <div className="flex flex-col gap-2 mb-3">
-              {selectedStrategies.map(sId => {
-                const st = strategies.find((s: any) => s.id === sId);
-                return (
-                  <div key={sId} className="flex items-center justify-between bg-amber-50 border border-amber-100 text-amber-800 px-4 py-3 rounded-xl text-sm font-medium shadow-sm">
-                    <div>
-                      <div className="font-bold">{st ? st.name : sId}</div>
-                      {st && <div className="text-xs text-amber-600/80 mt-0.5">Levels: L{st.minLevel}-L{st.maxLevel}</div>}
-                    </div>
-                    <button onClick={() => toggleSelection(setSelectedStrategies, selectedStrategies, sId)} className="p-1.5 hover:bg-amber-200/50 rounded-lg transition-colors text-amber-700">
+            <div className="flex flex-col gap-4">
+              {schedules.map((schedule, index) => (
+                <div key={schedule.id} className="bg-slate-50 border border-slate-200 p-4 rounded-2xl shadow-sm relative group">
+                  <div className="absolute right-3 top-3">
+                    <button onClick={() => removeSchedule(schedule.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
-                );
-              })}
-              {selectedStrategies.length === 0 && <p className="text-sm text-slate-400 italic">No strategies selected.</p>}
-            </div>
-
-            <select 
-              className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer font-medium appearance-none"
-              value=""
-              onChange={(e) => {
-                if (e.target.value && !selectedStrategies.includes(e.target.value)) {
-                  toggleSelection(setSelectedStrategies, selectedStrategies, e.target.value);
-                }
-              }}
-            >
-              <option value="" disabled>+ Add a Strategy...</option>
-              {strategies.filter((st: any) => !selectedStrategies.includes(st.id)).map((st: any) => (
-                <option key={st.id} value={st.id}>{st.name} (Levels {st.minLevel}-{st.maxLevel})</option>
+                  
+                  <div className="space-y-4 pr-8">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Time Slot</label>
+                      <select 
+                        className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer text-sm"
+                        value={schedule.timeSlotId}
+                        onChange={(e) => updateSchedule(schedule.id, 'timeSlotId', e.target.value)}
+                      >
+                        <option value="" disabled>Select Time Slot...</option>
+                        {timeSlots.map((ts: any) => (
+                          <option key={ts.id} value={ts.id}>{ts.name} ({ts.startTime} - {ts.endTime})</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Strategy</label>
+                      <select 
+                        className="w-full p-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer text-sm"
+                        value={schedule.strategyId}
+                        onChange={(e) => updateSchedule(schedule.id, 'strategyId', e.target.value)}
+                      >
+                        <option value="" disabled>Select Strategy...</option>
+                        {strategies.map((st: any) => (
+                          <option key={st.id} value={st.id}>{st.name} (Levels {st.minLevel}-{st.maxLevel})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
               ))}
-            </select>
+              
+              {schedules.length === 0 && (
+                <div className="text-center p-8 bg-slate-50 rounded-2xl border border-slate-200 border-dashed">
+                  <p className="text-slate-500 text-sm font-medium">No schedules configured.</p>
+                  <button onClick={addSchedule} className="mt-3 text-indigo-600 font-semibold hover:underline text-sm">Create your first schedule</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -167,9 +169,13 @@ export function BotSettingsModal({ bot, onClose }: { bot: any, onClose: () => vo
             Cancel
           </button>
           <button 
-            onClick={() => saveMutation.mutate({ games: selectedGames, timeSlots: selectedTimeSlots, strategies: selectedStrategies })}
-            disabled={saveMutation.isPending}
-            className="px-5 py-2.5 rounded-xl font-medium bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30 transition-all flex items-center space-x-2"
+            onClick={() => saveMutation.mutate({ games: selectedGames, schedules })}
+            disabled={saveMutation.isPending || hasInvalidSchedule}
+            className={`px-5 py-2.5 rounded-xl font-medium transition-all flex items-center space-x-2 ${
+              saveMutation.isPending || hasInvalidSchedule
+                ? 'bg-indigo-300 cursor-not-allowed text-white shadow-none'
+                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30'
+            }`}
           >
             {saveMutation.isPending ? 'Saving...' : 'Save Configuration'}
           </button>

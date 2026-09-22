@@ -176,75 +176,6 @@ function BotDetailsPage() {
           
           {/* Left Column: Settings Summary */}
           <div className="space-y-6">
-            <div className="glass-card rounded-2xl p-6 border border-slate-200/60">
-              <h3 className="font-bold text-slate-800 text-lg flex items-center space-x-2 mb-4">
-                <Activity className="w-5 h-5 text-indigo-500" />
-                <span>Active Configuration</span>
-              </h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Games</p>
-                  <div className="flex flex-wrap gap-2">
-                    {bot.settings?.games?.map((g: string) => (
-                      <span key={g} className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md text-xs font-bold border border-indigo-100">{g === 'B/S' ? 'Big/Small' : 'Red/Green'}</span>
-                    ))}
-                    {!bot.settings?.games?.length && <span className="text-sm text-slate-500 italic">None selected</span>}
-                  </div>
-                </div>
-                
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Time Slots</p>
-                  <div className="flex flex-col gap-2">
-                    {bot.settings?.timeSlots?.map((tId: string) => {
-                      const ts = timeSlots?.find((x: any) => x.id === tId);
-                      return ts ? (
-                        <div key={tId} className="bg-slate-50 text-slate-700 px-3 py-2 rounded-lg text-xs font-medium border border-slate-200 shadow-sm">
-                          <span className="font-bold text-slate-800">{ts.name}</span>
-                          <span className="text-slate-500 ml-2">({ts.startTime} - {ts.endTime})</span>
-                        </div>
-                      ) : (
-                         <span key={tId} className="bg-slate-100 text-slate-600 px-2 py-1 rounded-md text-xs font-medium border border-slate-200">{tId.substring(0,8)}...</span>
-                      );
-                    })}
-                    {!bot.settings?.timeSlots?.length && <span className="text-sm text-slate-500 italic">None selected</span>}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Strategies</p>
-                  <div className="flex flex-col gap-2">
-                    {bot.settings?.strategies?.map((sId: string) => {
-                       const st = strategies?.find((x: any) => x.id === sId);
-                       
-                       // Hack to highlight active level: scan recent logs for e.g. "L2 bet placed"
-                       const recentLog = [...logs].reverse().find(l => (l.msg || l.message || '').includes('bet placed'));
-                       const activeMatch = (recentLog?.msg || recentLog?.message || '').match(/L(\d+)/);
-                       const activeLvl = activeMatch ? parseInt(activeMatch[1], 10) : null;
-                       
-                       return st ? (
-                        <div key={sId} className="bg-amber-50 px-3 py-2 rounded-lg border border-amber-100 shadow-sm flex flex-col gap-1">
-                          <span className="font-bold text-amber-800 text-xs">{st.name}</span>
-                          <div className="flex gap-1 flex-wrap mt-1">
-                             {st.levels?.map((lvlAmt: number, i: number) => {
-                               const isAct = (i + 1) === activeLvl;
-                               return (
-                                 <span key={i} className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${isAct ? 'bg-amber-500 text-white border-amber-600 shadow-sm' : 'bg-amber-100/50 text-amber-700 border-amber-200/50'}`}>
-                                   L{i+1}: ₹{lvlAmt}
-                                 </span>
-                               );
-                             })}
-                          </div>
-                        </div>
-                       ) : (
-                        <span key={sId} className="bg-amber-50 text-amber-600 px-2 py-1 rounded-md text-xs font-medium border border-amber-100">{sId.substring(0,8)}...</span>
-                       );
-                    })}
-                    {!bot.settings?.strategies?.length && <span className="text-sm text-slate-500 italic">None selected</span>}
-                  </div>
-                </div>
-              </div>
-            </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="glass-card rounded-2xl p-5 border border-slate-200/60 bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg">
@@ -263,6 +194,83 @@ function BotDetailsPage() {
                    <span className="text-xs font-medium">Status</span>
                    <span className="font-bold bg-white/20 px-2 py-0.5 rounded-full text-xs">Live</span>
                  </div>
+              </div>
+            </div>
+
+            <div className="glass-card rounded-2xl p-6 border border-slate-200/60">
+              <h3 className="font-bold text-slate-800 text-lg flex items-center space-x-2 mb-4">
+                <Activity className="w-5 h-5 text-indigo-500" />
+                <span>Active Configuration</span>
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Games</p>
+                  <div className="flex flex-wrap gap-2">
+                    {bot.settings?.games?.map((g: string) => (
+                      <span key={g} className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md text-xs font-bold border border-indigo-100">{g === 'B/S' ? 'Big/Small' : 'Red/Green'}</span>
+                    ))}
+                    {!bot.settings?.games?.length && <span className="text-sm text-slate-500 italic">None selected</span>}
+                  </div>
+                </div>
+                
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Schedules</p>
+                  <div className="flex flex-col gap-3">
+                    {bot.settings?.schedules?.map((schedule: any, idx: number) => {
+                       const ts = timeSlots?.find((x: any) => x.id === schedule.timeSlotId);
+                       const st = strategies?.find((x: any) => x.id === schedule.strategyId);
+                       
+                       let isScheduleActive = false;
+                       if (ts && ts.startTime && ts.endTime) {
+                         const now = new Date();
+                         const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                         if (ts.startTime <= ts.endTime) {
+                           isScheduleActive = time >= ts.startTime && time <= ts.endTime;
+                         } else {
+                           isScheduleActive = time >= ts.startTime || time <= ts.endTime;
+                         }
+                       }
+                       
+                       // Hack to highlight active level: scan recent logs for e.g. "L2 bet placed"
+                       const recentLog = [...logs].reverse().find(l => (l.msg || l.message || '').includes('bet placed'));
+                       const activeMatch = (recentLog?.msg || recentLog?.message || '').match(/L(\d+)/);
+                       const activeLvl = activeMatch ? parseInt(activeMatch[1], 10) : null;
+                       
+                       return (
+                         <div key={schedule.id || idx} className={`bg-slate-50 border shadow-sm rounded-xl overflow-hidden transition-all ${isScheduleActive ? 'border-indigo-400 ring-1 ring-indigo-400' : 'border-slate-200'}`}>
+                           <div className={`px-3 py-2 border-b flex justify-between items-center ${isScheduleActive ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-100/50 border-slate-200'}`}>
+                             <div className="flex items-center gap-1.5">
+                               <span className="font-bold text-slate-700 text-xs uppercase tracking-wider">Time Slot:</span>
+                               <span className="text-xs font-medium text-slate-900">{ts ? `${ts.name} (${ts.startTime}-${ts.endTime})` : 'Unknown'}</span>
+                             </div>
+                             {isScheduleActive && (
+                               <span className="bg-indigo-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-widest animate-pulse">Live</span>
+                             )}
+                           </div>
+                           <div className="px-3 py-3">
+                             <span className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-1.5 block">Strategy: <span className="text-amber-700 capitalize">{st ? st.name : 'Unknown'}</span></span>
+                             {st && (
+                               <div className="flex gap-1 flex-wrap mt-1">
+                                 {st.levels?.map((lvlAmt: number, i: number) => {
+                                   const isAct = (i + 1) === activeLvl;
+                                   return (
+                                     <span key={i} className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${isAct ? 'bg-amber-500 text-white border-amber-600 shadow-sm' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                       L{i+1}: ₹{lvlAmt}
+                                     </span>
+                                   );
+                                 })}
+                               </div>
+                             )}
+                           </div>
+                         </div>
+                       );
+                    })}
+                    {(!bot.settings?.schedules || bot.settings.schedules.length === 0) && (
+                      <span className="text-sm text-slate-500 italic p-3 bg-slate-50 border border-slate-200 border-dashed rounded-xl block text-center">No schedules active</span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
