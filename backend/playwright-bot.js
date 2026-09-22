@@ -12,6 +12,7 @@ class PlaywrightBot {
     this.password = decrypt(botInstance.wingoPasswordAuth);
     this.endpoint = botInstance.endpoint;
     this.strategy = null; // Will be loaded dynamically if needed
+    this.settings = botInstance.settings || {};
     
     this.sub = redisSubscriber;
     this.pub = redisPublisher;
@@ -21,6 +22,13 @@ class PlaywrightBot {
     this.context = null;
     this.page = null;
     
+    this.playwrightContext = null;
+    this.predictionListener = null;
+
+    this.isDepositing = false;
+    this.depositFailed = false;
+    this.cancelDepositFlag = false;
+
     this.isRunning = false;
     this.pendingBets = [];
     this.sessionWins = 0;
@@ -90,6 +98,7 @@ class PlaywrightBot {
       this.browser = await chromium.launch(launchOptions);
       this.context = await this.browser.newContext(contextOptions);
       this.page = await this.context.newPage();
+      this.playwrightContext = this.context;
 
       await this.login();
 
@@ -257,6 +266,17 @@ class PlaywrightBot {
           this.currentBalance = balance;
           this.log(`💰 Current Balance: ₹${balance.toFixed(2)}`);
           this.publishEvent('BALANCE_UPDATE', { balance });
+          
+          if (!this.isDepositing && this.settings?.autoDeposit?.enabled) {
+             const minBal = this.settings.autoDeposit.minBalance || 0;
+             if (balance <= minBal && !this.depositFailed) {
+                 // Trigger auto deposit flow
+                 this.handleDepositFlow(balance).catch(e => {
+                     this.log(`Deposit flow error: ${e.message}`);
+                 });
+             }
+          }
+
           this.prisma.botInstance.update({
             where: { id: this.botId },
             data: { currentBalance: parseFloat(balance) }
@@ -417,6 +437,7 @@ class PlaywrightBot {
       }
 
       if (!currentIssue || !pending) return;
+      if (this.isDepositing) return;
 
       // 2. Add randomized jitter between 500ms and 2500ms to avoid exact sync with other bots
       const delay = Math.floor(Math.random() * 2000) + 500;
@@ -443,6 +464,9 @@ class PlaywrightBot {
       }
       
     } catch (e) {
+      if (this.isDepositing) {
+        return;
+      }
       if (this.isRunning) {
         this.log(`Error during prediction handling: ${e.message}`);
       }
@@ -451,6 +475,103 @@ class PlaywrightBot {
         await this.page.waitForTimeout(1000);
         await this.scrapeBalance();
       }
+    }
+  }
+
+  async handleDepositFlow(currentBalance) {
+    if (this.isDepositing || this.depositFailed) return;
+    this.isDepositing = true;
+    this.log(`💸 Low balance (₹${currentBalance}) detected. Initiating automated deposit flow...`);
+    
+    this.publishEvent('DEPOSIT_UPDATE', { status: 'NAVIGATING', address: null, failed: false });
+
+    try {
+        this.log("   Clicking back to home screen...");
+        await this.page.locator('.navbar__content-left .van-icon-arrow-left').first().evaluate(el => el.click());
+        await this.page.waitForTimeout(2000);
+
+        this.log("   Clicking Accounts tab...");
+        await this.page.locator('.tabbar__container-item:has-text("Account")').first().evaluate(el => el.click());
+        await this.page.waitForTimeout(2000);
+
+        this.log("   Clicking Deposit button...");
+        await this.page.locator('.totalSavings__container-content-item:has-text("Deposit")').first().evaluate(el => el.click());
+        await this.page.waitForTimeout(2000);
+
+        this.log("   Selecting USDT option...");
+        await this.page.locator('.Recharge__container-tabcard__bot:has-text("USDT")').first().evaluate(el => el.click());
+        await this.page.waitForTimeout(1000);
+
+        const amount = this.settings.autoDeposit?.depositAmount || 10;
+        this.log(`   Entering USDT amount: ${amount}`);
+        await this.page.locator('.amount-input input').first().fill(String(amount), { force: true });
+        await this.page.waitForTimeout(1000);
+
+        this.log("   Submitting deposit and waiting for new tab...");
+        const [newPage] = await Promise.all([
+            this.playwrightContext.waitForEvent('page', { timeout: 15000 }),
+            this.page.locator('.Recharge__container-rechageBtn').first().evaluate(el => el.click())
+        ]);
+
+        this.log("   New tab opened. Waiting for address...");
+        await newPage.waitForLoadState('networkidle');
+        
+        const addressEl = newPage.locator('._address_span_1fhyb_295').first();
+        await addressEl.waitFor({ state: 'visible', timeout: 15000 });
+        const rawText = await addressEl.innerText();
+        const address = rawText.trim();
+        this.log(`   ✅ Extracted Address: ${address}`);
+
+        this.publishEvent('DEPOSIT_UPDATE', { status: 'WAITING', address, failed: false });
+
+        this.cancelDepositFlag = false;
+        const waitMinutes = this.settings.autoDeposit?.waitTime || 5;
+        this.log(`   ⏳ Waiting for ${waitMinutes} minutes for payment reflection...`);
+        for (let i = 0; i < waitMinutes * 60; i++) {
+            if (this.cancelDepositFlag) {
+                this.log("   🛑 Deposit wait cancelled by user.");
+                break;
+            }
+            await this.page.waitForTimeout(1000);
+        }
+
+        this.log("   Wait complete. Closing deposit tab...");
+        await newPage.close();
+        
+        this.log("   Navigating back to game page...");
+        await this.page.goto("https://bdg2030.com/#/login", { waitUntil: "domcontentloaded" });
+        await this.page.waitForTimeout(4000);
+        
+        try {
+            const winGoCard = this.page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
+            await winGoCard.evaluate(el => el.click());
+            this.log("   Clicked 'Win Go 30s'.");
+        } catch (err) {
+            this.log("   Could not find 'Win Go 30s' card after deposit: " + err.message);
+        }
+        await this.page.waitForTimeout(3000);
+
+        this.isDepositing = false;
+        this.log("   Deposit flow complete. Resuming normal operations.");
+        
+    } catch (err) {
+        this.log(`   ❌ Deposit flow failed: ${err.message}`);
+        this.isDepositing = false;
+        this.depositFailed = true;
+        this.publishEvent('DEPOSIT_UPDATE', { status: 'FAILED', address: null, failed: true });
+        
+        // Recover state: navigate back to game so betting can resume safely
+        try {
+            this.log("   Attempting to recover state and return to game...");
+            await this.page.goto("https://bdg2030.com/#/login", { waitUntil: "domcontentloaded" });
+            await this.page.waitForTimeout(4000);
+            const winGoCard = this.page.locator(".lotterySlotItem").filter({ hasText: "Win Go 30s" }).first();
+            await winGoCard.evaluate(el => el.click());
+            await this.page.waitForTimeout(3000);
+            this.log("   Successfully recovered to Game screen.");
+        } catch (recoverErr) {
+            this.log("   Could not recover to game screen: " + recoverErr.message);
+        }
     }
   }
 }

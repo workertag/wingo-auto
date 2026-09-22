@@ -147,7 +147,20 @@ app.put('/api/bots/:id/settings', authenticateToken, async (req, res) => {
       where: { id: req.params.id },
       data: { settings }
     });
+    
+    // Dynamically notify the worker so running bots get the updated settings immediately
+    await botCommandQueue.add('update-settings', { action: 'UPDATE_SETTINGS', botId: req.params.id, settings });
+    
     res.json(bot);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/bots/:id/cancel-deposit', authenticateToken, async (req, res) => {
+  try {
+    await botCommandQueue.add('cancel-deposit', { action: 'CANCEL_DEPOSIT', botId: req.params.id });
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

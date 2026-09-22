@@ -8,21 +8,7 @@ export const Route = createFileRoute('/time-slots')({
   component: TimeSlotsPage,
 });
 
-function generateTimeOptions() {
-  const options = [];
-  for (let i = 0; i < 24; i++) {
-    for (let j = 0; j < 60; j += 30) {
-      const h = i.toString().padStart(2, '0');
-      const m = j.toString().padStart(2, '0');
-      const time = `${h}:${m}`;
-      const ampm = i >= 12 ? 'PM' : 'AM';
-      const displayH = i % 12 || 12;
-      const displayTime = `${displayH.toString().padStart(2, '0')}:${m} ${ampm}`;
-      options.push({ value: time, label: displayTime });
-    }
-  }
-  return options;
-}
+// Removed generateTimeOptions as we use native time inputs now
 
 function TimeSlotsPage() {
   const [timeSlots, setTimeSlots] = useState<any[]>([]);
@@ -30,8 +16,6 @@ function TimeSlotsPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', startTime: '09:00', endTime: '18:00' });
-
-  const timeOptions = useMemo(() => generateTimeOptions(), []);
 
   const fetchTimeSlots = async () => {
     try {
@@ -115,29 +99,23 @@ function TimeSlotsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-slate-600 mb-1.5">Start Time</label>
-                <select
+                <input
+                  type="time"
                   required
                   value={form.startTime}
                   onChange={e => setForm({...form, startTime: e.target.value})}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                >
-                  {timeOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-600 mb-1.5">End Time</label>
-                <select
+                <input
+                  type="time"
                   required
                   value={form.endTime}
                   onChange={e => setForm({...form, endTime: e.target.value})}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                >
-                  {timeOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
             <div className="flex space-x-3 pt-4 border-t border-slate-100">

@@ -1,10 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { AppLayout } from '../components/Layout';
 import { Bot, Activity, Wifi, Terminal } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { BotSettingsModal } from '../components/BotSettingsModal';
+import { Wallet, X } from 'lucide-react';
+import QRCode from 'react-qr-code';
 
 export const Route = createFileRoute('/bots_/$botId')({
   component: BotDetailsPage,
@@ -12,8 +14,18 @@ export const Route = createFileRoute('/bots_/$botId')({
 
 function BotDetailsPage() {
   const { botId } = Route.useParams();
+  const queryClient = useQueryClient();
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<'logs' | 'history'>('logs');
+  
+  // Auto Deposit State
+  const [autoDeposit, setAutoDeposit] = useState({
+    enabled: false,
+    minBalance: 160,
+    depositAmount: 10,
+    waitTime: 5
+  });
+  const [hasUnsavedAutoDeposit, setHasUnsavedAutoDeposit] = useState(false);
   const [logs, setLogs] = useState<any[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
   
@@ -23,11 +35,58 @@ function BotDetailsPage() {
   const [losses, setLosses] = useState<number>(0);
   const [dynamicStatus, setDynamicStatus] = useState<string>('STOPPED');
 
+  const [depositState, setDepositState] = useState({ status: 'IDLE', address: null as string | null, failed: false });
+  const [depositTimer, setDepositTimer] = useState<number>(0);
+
+  useEffect(() => {
+    let interval: any;
+    if (depositState.status === 'WAITING' && depositTimer > 0) {
+      interval = setInterval(() => {
+        setDepositTimer(prev => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [depositState.status, depositTimer]);
+
   const { data: bot, isLoading } = useQuery({
     queryKey: ['bot', botId],
     queryFn: async () => {
-      const res = await api.request(`/bots/${botId}`);
+      const b = await api.request(`/bots/${botId}`);
+      if (b.settings?.autoDeposit) {
+        setAutoDeposit(b.settings.autoDeposit);
+        setHasUnsavedAutoDeposit(false);
+      }
+      return b;
+    },
+    refetchInterval: 5000
+  });
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: async (newSettings: any) => {
+      const currentSettings = bot?.settings || {};
+      const res = await api.request(`/bots/${botId}/settings`, {
+        method: 'PUT',
+        body: JSON.stringify({ settings: { ...currentSettings, ...newSettings } })
+      });
       return res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bot', botId] });
+      setHasUnsavedAutoDeposit(false);
+    }
+  });
+
+  const handleAutoDepositChange = (field: string, value: any) => {
+    setAutoDeposit(prev => ({ ...prev, [field]: value }));
+    setHasUnsavedAutoDeposit(true);
+  };
+
+  const cancelDepositMutation = useMutation({
+    mutationFn: async () => {
+      await api.request(`/bots/${botId}/cancel-deposit`, { method: 'POST' });
+    },
+    onSuccess: () => {
+      setDepositState({ status: 'IDLE', address: null, failed: false });
     }
   });
 
@@ -95,6 +154,13 @@ function BotDetailsPage() {
             else setLosses(prev => prev + 1);
             refetchHistory(); // Refresh history table
           }
+          if (data.type === 'DEPOSIT_UPDATE') {
+            setDepositState(prev => ({ ...prev, ...data.data }));
+            if (data.data.status === 'WAITING') {
+              // Reset timer to autoDeposit.waitTime minutes
+              setDepositTimer((autoDeposit.waitTime || 5) * 60);
+            }
+          }
         }
       } catch (err) { }
     };
@@ -102,7 +168,10 @@ function BotDetailsPage() {
   }, [botId]);
 
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = document.getElementById('logs-container');
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [logs]);
 
   if (isLoading) return <AppLayout><div className="p-8 text-slate-500">Loading bot details...</div></AppLayout>;
@@ -195,6 +264,140 @@ function BotDetailsPage() {
                    <span className="font-bold bg-white/20 px-2 py-0.5 rounded-full text-xs">Live</span>
                  </div>
               </div>
+            </div>
+            
+            {/* Auto Deposit System */}
+            <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/60 shadow-xl relative overflow-hidden">
+              
+              <div className="flex justify-between items-center mb-6 relative z-10">
+                <h3 className="font-bold text-slate-800 text-lg flex items-center space-x-2 tracking-wide uppercase">
+                  <Wallet className="w-5 h-5 text-indigo-500" />
+                  <span className="font-black">AUTO DEPOSIT SYSTEM</span>
+                </h3>
+                
+                {/* Toggle Switch */}
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer"
+                    checked={autoDeposit.enabled}
+                    onChange={(e) => handleAutoDepositChange('enabled', e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
+                </label>
+              </div>
+
+              {depositState.status === 'IDLE' ? (
+                <div className="space-y-4 relative z-10">
+                  <div className="bg-slate-50 rounded-3xl p-1 px-2 border border-slate-200 focus-within:border-indigo-500/50 transition-colors shadow-inner">
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase px-4 pt-3">Minimum Account Balance (₹)</label>
+
+                    <input 
+                      type="number"
+                      value={autoDeposit.minBalance}
+                      onChange={(e) => handleAutoDepositChange('minBalance', Number(e.target.value))}
+                      className="w-full bg-transparent border-none text-slate-900 font-bold text-lg px-4 pb-3 pt-1 focus:ring-0 outline-none"
+                    />
+                  </div>
+
+                  <div className="bg-slate-50 rounded-3xl p-1 px-2 border border-slate-200 focus-within:border-indigo-500/50 transition-colors shadow-inner">
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase px-4 pt-3">Deposit USDT Amount</label>
+                    <input 
+                      type="number"
+                      value={autoDeposit.depositAmount}
+                      onChange={(e) => handleAutoDepositChange('depositAmount', Number(e.target.value))}
+                      className="w-full bg-transparent border-none text-slate-900 font-bold text-lg px-4 pb-3 pt-1 focus:ring-0 outline-none"
+                    />
+                  </div>
+
+                  <div className="bg-slate-50 rounded-3xl p-1 px-2 border border-slate-200 focus-within:border-indigo-500/50 transition-colors shadow-inner">
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase px-4 pt-3">Wait Time (Minutes)</label>
+                    <input 
+                      type="number"
+                      value={autoDeposit.waitTime}
+                      onChange={(e) => handleAutoDepositChange('waitTime', Number(e.target.value))}
+                      className="w-full bg-transparent border-none text-slate-900 font-bold text-lg px-4 pb-3 pt-1 focus:ring-0 outline-none"
+                    />
+                  </div>
+                  
+                  <button 
+                    onClick={() => saveSettingsMutation.mutate({ autoDeposit })}
+                    disabled={saveSettingsMutation.isPending || !hasUnsavedAutoDeposit}
+                    className={`w-full mt-6 py-3.5 rounded-3xl font-bold text-lg transition-all shadow-lg ${
+                      hasUnsavedAutoDeposit 
+                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/25' 
+                        : 'bg-indigo-600/50 text-white/80 shadow-none cursor-not-allowed'
+                    }`}
+                  >
+                    {saveSettingsMutation.isPending ? 'Saving...' : 'Save Settings'}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4 relative z-10 flex flex-col items-center pt-2">
+                  <button 
+                    onClick={() => cancelDepositMutation.mutate()}
+                    className="absolute top-0 right-0 p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"
+                    title="Cancel Deposit Flow"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                  
+                  {depositState.address ? (
+                    <div className="flex flex-col items-center w-full">
+                      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4 inline-block">
+                        <QRCode value={depositState.address} size={180} />
+                      </div>
+                      
+                      <div className="w-full bg-slate-50 rounded-xl p-3 border border-slate-200 flex items-center gap-3">
+                        <span className="text-xs font-mono text-slate-700 truncate flex-1 select-all">{depositState.address}</span>
+                        <button 
+                          className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                          onClick={() => {
+                            navigator.clipboard.writeText(depositState.address!);
+                            alert("Address copied!");
+                          }}
+                        >
+                          Copy
+                        </button>
+                      </div>
+
+                      {depositState.status === 'WAITING' && (
+                        <div className="mt-5 text-center">
+                          <p className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-1">Time Remaining</p>
+                          <p className="text-3xl font-black text-indigo-600 font-mono">
+                            {Math.floor(depositTimer / 60).toString().padStart(2, '0')}:{(depositTimer % 60).toString().padStart(2, '0')}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-2">Waiting for payment reflection...</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="py-12 flex flex-col items-center justify-center">
+                      {depositState.status === 'NAVIGATING' && (
+                        <div className="text-center">
+                          <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
+                          <p className="text-sm font-bold text-indigo-500 animate-pulse">Navigating to deposit screen...</p>
+                        </div>
+                      )}
+                      {depositState.failed && (
+                        <div className="text-center">
+                          <div className="w-12 h-12 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </div>
+                          <p className="text-sm font-bold text-red-500">Deposit flow failed!</p>
+                          <p className="text-xs text-red-400 mt-1">Please check the logs for details.</p>
+                          <button 
+                            className="mt-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors"
+                            onClick={() => setDepositState({ status: 'IDLE', address: null, failed: false })}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="glass-card rounded-2xl p-6 border border-slate-200/60">
@@ -307,7 +510,7 @@ function BotDetailsPage() {
 
               {/* Tab Content: Logs */}
               {activeTab === 'logs' && (
-                <div className="flex-1 bg-slate-900 p-4 overflow-y-auto font-mono text-sm">
+                <div id="logs-container" className="flex-1 bg-slate-900 p-4 overflow-y-auto font-mono text-sm scroll-smooth">
                   {logs.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-slate-500">
                       Waiting for events...

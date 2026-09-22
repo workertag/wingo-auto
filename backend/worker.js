@@ -64,6 +64,22 @@ const worker = new Worker('bot-commands', async job => {
       }).catch(() => {});
     }
   }
+
+  if (action === 'UPDATE_SETTINGS') {
+    const bot = activeBots.get(botId);
+    if (bot && typeof bot !== 'string') {
+      console.log(`Updating settings dynamically for running bot ${botId}...`);
+      bot.settings = job.data.settings;
+    }
+  }
+
+  if (action === 'CANCEL_DEPOSIT') {
+    const bot = activeBots.get(botId);
+    if (bot && typeof bot !== 'string') {
+      console.log(`Cancelling deposit flow for bot ${botId}...`);
+      bot.cancelDepositFlag = true;
+    }
+  }
 }, { connection });
 
 worker.on('failed', (job, err) => {
