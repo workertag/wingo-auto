@@ -577,6 +577,7 @@ function BotDetailsPage() {
                         {st && (
                           <div className="flex gap-1 flex-wrap mt-1">
                             {st.levels?.map((lvlAmt: number, i: number) => {
+                              if (!lvlAmt || lvlAmt === 0) return null;
                               const isAct = (i + 1) === activeLvl;
                               return (
                                 <span key={i} className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${isAct ? 'bg-amber-500 text-white border-amber-600 shadow-sm' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>

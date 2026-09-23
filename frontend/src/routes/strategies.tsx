@@ -308,7 +308,11 @@ function StrategiesPage() {
             </div>
           ) : (
             filteredStrategies.map(st => {
-              const totalAmountRequired = st.levels.slice((st.minLevel || 1) - 1, st.maxLevel || st.levels.length).reduce((a: number, b: number) => a + b, 0);
+              const actualLevels = st.levels.map((amt: number, i: number) => ({ amt, level: i + 1 })).filter((l: any) => l.amt > 0);
+              const displayMin = actualLevels.length > 0 ? actualLevels[0].level : (st.minLevel || 1);
+              const displayMax = actualLevels.length > 0 ? actualLevels[actualLevels.length - 1].level : (st.maxLevel || st.levels.length);
+              const totalAmountRequired = actualLevels.reduce((a: number, b: any) => a + b.amt, 0);
+
               return (
                 <div 
                   key={st.id} 
@@ -354,15 +358,15 @@ function StrategiesPage() {
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500 font-medium">Active Levels</span>
-                      <span className="text-slate-800 font-bold font-mono">L{st.minLevel} - L{st.maxLevel}</span>
+                      <span className="text-slate-800 font-bold font-mono">L{displayMin} - L{displayMax}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500 font-medium">Base Bet</span>
-                      <span className="text-emerald-500 font-bold font-mono">₹{st.levels[(st.minLevel || 1) - 1]}</span>
+                      <span className="text-emerald-500 font-bold font-mono">₹{st.levels[displayMin - 1] || 0}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500 font-medium">Max Bet (L{st.maxLevel})</span>
-                      <span className="text-red-500 font-bold font-mono">₹{st.levels[(st.maxLevel || 1) - 1]}</span>
+                      <span className="text-slate-500 font-medium">Max Bet (L{displayMax})</span>
+                      <span className="text-red-500 font-bold font-mono">₹{st.levels[displayMax - 1] || 0}</span>
                     </div>
                     <div className="flex justify-between text-sm pt-3 mt-3 border-t border-slate-100">
                       <span className="text-slate-800 font-bold">Total Amount Required</span>
@@ -374,12 +378,15 @@ function StrategiesPage() {
                     <div className="mt-4 pt-4 border-t border-slate-100 animate-in slide-in-from-top-2" onClick={e => e.stopPropagation()}>
                       <h4 className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">All Bet Levels</h4>
                       <div className="grid grid-cols-5 gap-2">
-                        {st.levels.slice(st.minLevel - 1, st.maxLevel).map((amt: number, idx: number) => (
-                          <div key={idx} className="bg-slate-50 rounded-lg border border-slate-100 p-1.5 text-center shadow-sm">
-                            <div className="text-[10px] font-bold text-indigo-500 mb-0.5 uppercase">L{idx + (st.minLevel || 1)}</div>
-                            <div className="text-xs font-mono font-semibold text-slate-700">₹{amt}</div>
-                          </div>
-                        ))}
+                        {st.levels.map((amt: number, idx: number) => {
+                          if (!amt || amt === 0) return null;
+                          return (
+                            <div key={idx} className="bg-slate-50 rounded-lg border border-slate-100 p-1.5 text-center shadow-sm">
+                              <div className="text-[10px] font-bold text-indigo-500 mb-0.5 uppercase">L{idx + 1}</div>
+                              <div className="text-xs font-mono font-semibold text-slate-700">₹{amt}</div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
