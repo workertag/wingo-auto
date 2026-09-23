@@ -17,7 +17,7 @@ function BotDetailsPage() {
   const queryClient = useQueryClient();
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<'logs' | 'history'>('logs');
-  
+
   // Auto Deposit State
   const [autoDeposit, setAutoDeposit] = useState({
     enabled: false,
@@ -28,7 +28,7 @@ function BotDetailsPage() {
   const [hasUnsavedAutoDeposit, setHasUnsavedAutoDeposit] = useState(false);
   const [logs, setLogs] = useState<any[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
-  
+
   const [balance, setBalance] = useState<number | null>(null);
   const [profit, setProfit] = useState<number>(0);
   const [wins, setWins] = useState<number>(0);
@@ -124,17 +124,17 @@ function BotDetailsPage() {
       // Actually we can sum up the profit from historyData if available.
     }
   }, [bot]);
-  
+
   useEffect(() => {
     if (historyData) {
-       const totalProfit = historyData.reduce((sum: number, bet: any) => sum + (bet.profit || 0), 0);
-       setProfit(totalProfit);
+      const totalProfit = historyData.reduce((sum: number, bet: any) => sum + (bet.profit || 0), 0);
+      setProfit(totalProfit);
     }
   }, [historyData]);
 
   // Specific SSE listener for this bot
   useEffect(() => {
-    const eventSource = new EventSource('http://localhost:3001/api/stream');
+    const eventSource = new EventSource('/api/stream');
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -144,7 +144,7 @@ function BotDetailsPage() {
           }
           if (data.type === 'BOT_STARTED') setDynamicStatus('RUNNING');
           if (data.type === 'BOT_STOPPED') setDynamicStatus('STOPPED');
-          
+
           if (data.type === 'BALANCE_UPDATE') {
             setBalance(data.data.balance);
           }
@@ -180,7 +180,7 @@ function BotDetailsPage() {
   return (
     <AppLayout>
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        
+
         {/* Header Header */}
         <div className="glass-card rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 border border-slate-200/60 shadow-xl shadow-slate-200/50">
           <div className="flex items-center space-x-4">
@@ -189,11 +189,10 @@ function BotDetailsPage() {
             </div>
             <div>
               <h1 className="text-3xl font-black text-slate-800 tracking-tight">{bot.name}</h1>
-              <div className="flex items-center space-x-3 mt-1.5">
-                <span className={`px-3 py-1 rounded-full text-xs font-black tracking-widest uppercase ${
-                  dynamicStatus === 'RUNNING' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 
+              <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                <span className={`px-3 py-1 rounded-full text-xs font-black tracking-widest uppercase ${dynamicStatus === 'RUNNING' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
                   'bg-slate-100 text-slate-500 border border-slate-200'
-                }`}>
+                  }`}>
                   {dynamicStatus === 'RUNNING' ? (
                     <span className="flex items-center space-x-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -203,14 +202,27 @@ function BotDetailsPage() {
                     <span>Stopped</span>
                   )}
                 </span>
-                <span className="text-sm font-semibold text-slate-400 bg-slate-50 px-3 py-1 rounded-full border border-slate-100">{bot.phone}</span>
+                <span className="text-sm font-semibold text-slate-400 bg-slate-50 px-3 py-1 rounded-full border border-slate-100 flex items-center space-x-1.5">
+                  <span>{bot.phone}</span>
+                </span>
+                {bot.endpoint ? (
+                  <span className="text-sm font-semibold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100 flex items-center space-x-1.5 shadow-sm" title="Connected via Proxy">
+                    <Wifi className="w-3.5 h-3.5 animate-pulse text-indigo-500" />
+                    <span>Proxy: {bot.endpoint.host}</span>
+                  </span>
+                ) : (
+                  <span className="text-sm font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 flex items-center space-x-1.5" title="Direct Connection (No Proxy)">
+                    <Wifi className="w-3.5 h-3.5 opacity-50" />
+                    <span>Direct IP</span>
+                  </span>
+                )}
               </div>
             </div>
           </div>
-          
+
           <div className="flex flex-col sm:flex-row items-center gap-3">
             {dynamicStatus === 'RUNNING' ? (
-              <button 
+              <button
                 onClick={async () => {
                   setDynamicStatus('STOPPING');
                   await api.request(`/bots/${bot.id}/stop`, { method: 'POST' });
@@ -221,7 +233,7 @@ function BotDetailsPage() {
                 {dynamicStatus === 'STOPPING' ? 'Stopping...' : 'Stop Bot'}
               </button>
             ) : (
-              <button 
+              <button
                 onClick={async () => {
                   setDynamicStatus('STARTING');
                   await api.request(`/bots/${bot.id}/start`, { method: 'POST' });
@@ -232,7 +244,7 @@ function BotDetailsPage() {
                 {dynamicStatus === 'STARTING' ? 'Starting...' : 'Start Bot'}
               </button>
             )}
-            <button 
+            <button
               onClick={() => setShowSettings(true)}
               className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold tracking-wide transition-all shadow-lg shadow-slate-900/20 active:scale-95"
             >
@@ -242,43 +254,43 @@ function BotDetailsPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+
           {/* Left Column: Settings Summary */}
           <div className="space-y-6">
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="glass-card rounded-2xl p-5 border border-slate-200/60 bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg">
-                 <h3 className="font-bold text-sm mb-1 text-indigo-100">Session Profit</h3>
-                 <p className="text-2xl font-black mb-3">₹{profit.toFixed(2)}</p>
-                 <div className="flex justify-between items-center text-indigo-100">
-                   <span className="text-xs font-medium">W / L</span>
-                   <span className="font-bold bg-white/20 px-2 py-0.5 rounded-full text-xs">{wins} / {losses}</span>
-                 </div>
+                <h3 className="font-bold text-sm mb-1 text-indigo-100">Session Profit</h3>
+                <p className="text-2xl font-black mb-3">₹{profit.toFixed(2)}</p>
+                <div className="flex justify-between items-center text-indigo-100">
+                  <span className="text-xs font-medium">W / L</span>
+                  <span className="font-bold bg-white/20 px-2 py-0.5 rounded-full text-xs">{wins} / {losses}</span>
+                </div>
               </div>
 
               <div className="glass-card rounded-2xl p-5 border border-slate-200/60 bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg">
-                 <h3 className="font-bold text-sm mb-1 text-emerald-100">Wallet Balance</h3>
-                 <p className="text-2xl font-black mb-3">{balance !== null ? `₹${balance.toFixed(2)}` : '---'}</p>
-                 <div className="flex justify-between items-center text-emerald-100">
-                   <span className="text-xs font-medium">Status</span>
-                   <span className="font-bold bg-white/20 px-2 py-0.5 rounded-full text-xs">Live</span>
-                 </div>
+                <h3 className="font-bold text-sm mb-1 text-emerald-100">Wallet Balance</h3>
+                <p className="text-2xl font-black mb-3">{balance !== null ? `₹${balance.toFixed(2)}` : '---'}</p>
+                <div className="flex justify-between items-center text-emerald-100">
+                  <span className="text-xs font-medium">Status</span>
+                  <span className="font-bold bg-white/20 px-2 py-0.5 rounded-full text-xs">Live</span>
+                </div>
               </div>
             </div>
-            
+
             {/* Auto Deposit System */}
             <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-200/60 shadow-xl relative overflow-hidden">
-              
-              <div className="flex justify-between items-center mb-6 relative z-10">
+
+              <div className="flex flex-wrap gap-4 justify-between items-center mb-6 relative z-10">
                 <h3 className="font-bold text-slate-800 text-lg flex items-center space-x-2 tracking-wide uppercase">
                   <Wallet className="w-5 h-5 text-indigo-500" />
                   <span className="font-black">AUTO DEPOSIT SYSTEM</span>
                 </h3>
-                
+
                 {/* Toggle Switch */}
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     className="sr-only peer"
                     checked={autoDeposit.enabled}
                     onChange={(e) => handleAutoDepositChange('enabled', e.target.checked)}
@@ -292,7 +304,7 @@ function BotDetailsPage() {
                   <div className="bg-slate-50 rounded-3xl p-1 px-2 border border-slate-200 focus-within:border-indigo-500/50 transition-colors shadow-inner">
                     <label className="block text-[11px] font-bold text-slate-500 uppercase px-4 pt-3">Minimum Account Balance (₹)</label>
 
-                    <input 
+                    <input
                       type="number"
                       value={autoDeposit.minBalance}
                       onChange={(e) => handleAutoDepositChange('minBalance', Number(e.target.value))}
@@ -302,7 +314,7 @@ function BotDetailsPage() {
 
                   <div className="bg-slate-50 rounded-3xl p-1 px-2 border border-slate-200 focus-within:border-indigo-500/50 transition-colors shadow-inner">
                     <label className="block text-[11px] font-bold text-slate-500 uppercase px-4 pt-3">Deposit USDT Amount</label>
-                    <input 
+                    <input
                       type="number"
                       value={autoDeposit.depositAmount}
                       onChange={(e) => handleAutoDepositChange('depositAmount', Number(e.target.value))}
@@ -312,45 +324,44 @@ function BotDetailsPage() {
 
                   <div className="bg-slate-50 rounded-3xl p-1 px-2 border border-slate-200 focus-within:border-indigo-500/50 transition-colors shadow-inner">
                     <label className="block text-[11px] font-bold text-slate-500 uppercase px-4 pt-3">Wait Time (Minutes)</label>
-                    <input 
+                    <input
                       type="number"
                       value={autoDeposit.waitTime}
                       onChange={(e) => handleAutoDepositChange('waitTime', Number(e.target.value))}
                       className="w-full bg-transparent border-none text-slate-900 font-bold text-lg px-4 pb-3 pt-1 focus:ring-0 outline-none"
                     />
                   </div>
-                  
-                  <button 
+
+                  <button
                     onClick={() => saveSettingsMutation.mutate({ autoDeposit })}
                     disabled={saveSettingsMutation.isPending || !hasUnsavedAutoDeposit}
-                    className={`w-full mt-6 py-3.5 rounded-3xl font-bold text-lg transition-all shadow-lg ${
-                      hasUnsavedAutoDeposit 
-                        ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/25' 
-                        : 'bg-indigo-600/50 text-white/80 shadow-none cursor-not-allowed'
-                    }`}
+                    className={`w-full mt-6 py-3.5 rounded-3xl font-bold text-lg transition-all shadow-lg ${hasUnsavedAutoDeposit
+                      ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/25'
+                      : 'bg-indigo-600/50 text-white/80 shadow-none cursor-not-allowed'
+                      }`}
                   >
                     {saveSettingsMutation.isPending ? 'Saving...' : 'Save Settings'}
                   </button>
                 </div>
               ) : (
                 <div className="space-y-4 relative z-10 flex flex-col items-center pt-2">
-                  <button 
+                  <button
                     onClick={() => cancelDepositMutation.mutate()}
                     className="absolute top-0 right-0 p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors"
                     title="Cancel Deposit Flow"
                   >
                     <X className="w-5 h-5" />
                   </button>
-                  
+
                   {depositState.address ? (
                     <div className="flex flex-col items-center w-full">
                       <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4 inline-block">
                         <QRCode value={depositState.address} size={180} />
                       </div>
-                      
+
                       <div className="w-full bg-slate-50 rounded-xl p-3 border border-slate-200 flex items-center gap-3">
                         <span className="text-xs font-mono text-slate-700 truncate flex-1 select-all">{depositState.address}</span>
-                        <button 
+                        <button
                           className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
                           onClick={() => {
                             navigator.clipboard.writeText(depositState.address!);
@@ -386,7 +397,7 @@ function BotDetailsPage() {
                           </div>
                           <p className="text-sm font-bold text-red-500">Deposit flow failed!</p>
                           <p className="text-xs text-red-400 mt-1">Please check the logs for details.</p>
-                          <button 
+                          <button
                             className="mt-4 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors"
                             onClick={() => setDepositState({ status: 'IDLE', address: null, failed: false })}
                           >
@@ -399,109 +410,30 @@ function BotDetailsPage() {
                 </div>
               )}
             </div>
-
-            <div className="glass-card rounded-2xl p-6 border border-slate-200/60">
-              <h3 className="font-bold text-slate-800 text-lg flex items-center space-x-2 mb-4">
-                <Activity className="w-5 h-5 text-indigo-500" />
-                <span>Active Configuration</span>
-              </h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Games</p>
-                  <div className="flex flex-wrap gap-2">
-                    {bot.settings?.games?.map((g: string) => (
-                      <span key={g} className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md text-xs font-bold border border-indigo-100">{g === 'B/S' ? 'Big/Small' : 'Red/Green'}</span>
-                    ))}
-                    {!bot.settings?.games?.length && <span className="text-sm text-slate-500 italic">None selected</span>}
-                  </div>
-                </div>
-                
-                <div>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Schedules</p>
-                  <div className="flex flex-col gap-3">
-                    {bot.settings?.schedules?.map((schedule: any, idx: number) => {
-                       const ts = timeSlots?.find((x: any) => x.id === schedule.timeSlotId);
-                       const st = strategies?.find((x: any) => x.id === schedule.strategyId);
-                       
-                       let isScheduleActive = false;
-                       if (ts && ts.startTime && ts.endTime) {
-                         const now = new Date();
-                         const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-                         if (ts.startTime <= ts.endTime) {
-                           isScheduleActive = time >= ts.startTime && time <= ts.endTime;
-                         } else {
-                           isScheduleActive = time >= ts.startTime || time <= ts.endTime;
-                         }
-                       }
-                       
-                       // Hack to highlight active level: scan recent logs for e.g. "L2 bet placed"
-                       const recentLog = [...logs].reverse().find(l => (l.msg || l.message || '').includes('bet placed'));
-                       const activeMatch = (recentLog?.msg || recentLog?.message || '').match(/L(\d+)/);
-                       const activeLvl = activeMatch ? parseInt(activeMatch[1], 10) : null;
-                       
-                       return (
-                         <div key={schedule.id || idx} className={`bg-slate-50 border shadow-sm rounded-xl overflow-hidden transition-all ${isScheduleActive ? 'border-indigo-400 ring-1 ring-indigo-400' : 'border-slate-200'}`}>
-                           <div className={`px-3 py-2 border-b flex justify-between items-center ${isScheduleActive ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-100/50 border-slate-200'}`}>
-                             <div className="flex items-center gap-1.5">
-                               <span className="font-bold text-slate-700 text-xs uppercase tracking-wider">Time Slot:</span>
-                               <span className="text-xs font-medium text-slate-900">{ts ? `${ts.name} (${ts.startTime}-${ts.endTime})` : 'Unknown'}</span>
-                             </div>
-                             {isScheduleActive && (
-                               <span className="bg-indigo-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-widest animate-pulse">Live</span>
-                             )}
-                           </div>
-                           <div className="px-3 py-3">
-                             <span className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-1.5 block">Strategy: <span className="text-amber-700 capitalize">{st ? st.name : 'Unknown'}</span></span>
-                             {st && (
-                               <div className="flex gap-1 flex-wrap mt-1">
-                                 {st.levels?.map((lvlAmt: number, i: number) => {
-                                   const isAct = (i + 1) === activeLvl;
-                                   return (
-                                     <span key={i} className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${isAct ? 'bg-amber-500 text-white border-amber-600 shadow-sm' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                                       L{i+1}: ₹{lvlAmt}
-                                     </span>
-                                   );
-                                 })}
-                               </div>
-                             )}
-                           </div>
-                         </div>
-                       );
-                    })}
-                    {(!bot.settings?.schedules || bot.settings.schedules.length === 0) && (
-                      <span className="text-sm text-slate-500 italic p-3 bg-slate-50 border border-slate-200 border-dashed rounded-xl block text-center">No schedules active</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Right Column: Logs & History Tabs */}
           <div className="lg:col-span-2">
             <div className="glass-card rounded-2xl border border-slate-200/60 flex flex-col h-[600px] overflow-hidden">
-              
+
               {/* Tabs Header */}
               <div className="flex border-b border-slate-200/60 bg-slate-50/50">
                 <button
                   onClick={() => setActiveTab('logs')}
-                  className={`flex-1 py-4 font-bold text-sm flex items-center justify-center space-x-2 transition-colors ${
-                    activeTab === 'logs' 
-                      ? 'text-indigo-600 bg-white border-b-2 border-indigo-500' 
-                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/50'
-                  }`}
+                  className={`flex-1 py-4 font-bold text-sm flex items-center justify-center space-x-2 transition-colors ${activeTab === 'logs'
+                    ? 'text-indigo-600 bg-white border-b-2 border-indigo-500'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/50'
+                    }`}
                 >
                   <Terminal className="w-4 h-4" />
                   <span>Server Logs</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('history')}
-                  className={`flex-1 py-4 font-bold text-sm flex items-center justify-center space-x-2 transition-colors ${
-                    activeTab === 'history' 
-                      ? 'text-indigo-600 bg-white border-b-2 border-indigo-500' 
-                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/50'
-                  }`}
+                  className={`flex-1 py-4 font-bold text-sm flex items-center justify-center space-x-2 transition-colors ${activeTab === 'history'
+                    ? 'text-indigo-600 bg-white border-b-2 border-indigo-500'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100/50'
+                    }`}
                 >
                   <Activity className="w-4 h-4" />
                   <span>Bet History</span>
@@ -545,8 +477,9 @@ function BotDetailsPage() {
                       No bet history available.
                     </div>
                   ) : (
-                    <table className="w-full text-left border-collapse">
-                      <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
+                    <div className="w-full overflow-x-auto">
+                      <table className="w-full text-left border-collapse whitespace-nowrap">
+                        <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
                         <tr>
                           <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Issue</th>
                           <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
@@ -560,31 +493,107 @@ function BotDetailsPage() {
                           <tr key={bet.id} className="hover:bg-slate-50 transition-colors">
                             <td className="px-6 py-4 font-mono text-sm text-slate-600">{bet.issue}</td>
                             <td className="px-6 py-4">
-                              <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${
-                                bet.betType === 'RED' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                              <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${bet.betType === 'RED' ? 'bg-rose-50 text-rose-600 border-rose-100' :
                                 bet.betType === 'GREEN' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                'bg-indigo-50 text-indigo-600 border-indigo-100'
-                              }`}>{bet.betType}</span>
+                                  'bg-indigo-50 text-indigo-600 border-indigo-100'
+                                }`}>{bet.betType}</span>
                             </td>
                             <td className="px-6 py-4 font-bold text-slate-700">₹{bet.amount.toFixed(2)}</td>
                             <td className="px-6 py-4">
-                              <span className={`text-xs font-bold uppercase tracking-wider ${
-                                bet.status === 'WON' ? 'text-emerald-500' :
+                              <span className={`text-xs font-bold uppercase tracking-wider ${bet.status === 'WON' ? 'text-emerald-500' :
                                 bet.status === 'LOST' ? 'text-rose-500' : 'text-amber-500'
-                              }`}>{bet.status}</span>
+                                }`}>{bet.status}</span>
                             </td>
-                            <td className={`px-6 py-4 font-bold ${
-                               bet.profit > 0 ? 'text-emerald-500' : bet.profit < 0 ? 'text-rose-500' : 'text-slate-400'
-                            }`}>
+                            <td className={`px-6 py-4 font-bold ${bet.profit > 0 ? 'text-emerald-500' : bet.profit < 0 ? 'text-rose-500' : 'text-slate-400'
+                              }`}>
                               {bet.profit > 0 ? '+' : ''}{bet.profit ? `₹${bet.profit.toFixed(2)}` : '---'}
                             </td>
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                      </table>
+                    </div>
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* Full Width Row: Active Configuration */}
+        <div className="glass-card rounded-2xl p-6 border border-slate-200/60 mt-6">
+          <h3 className="font-bold text-slate-800 text-lg flex items-center space-x-2 mb-4">
+            <Activity className="w-5 h-5 text-indigo-500" />
+            <span>Active Configuration</span>
+          </h3>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Games</p>
+              <div className="flex flex-wrap gap-2">
+                {bot.settings?.games?.map((g: string) => (
+                  <span key={g} className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md text-xs font-bold border border-indigo-100">{g === 'B/S' ? 'Big/Small' : 'Red/Green'}</span>
+                ))}
+                {!bot.settings?.games?.length && <span className="text-sm text-slate-500 italic">None selected</span>}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Schedules</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {bot.settings?.schedules?.map((schedule: any, idx: number) => {
+                  const ts = timeSlots?.find((x: any) => x.id === schedule.timeSlotId);
+                  const st = strategies?.find((x: any) => x.id === schedule.strategyId);
+
+                  let isScheduleActive = false;
+                  if (ts && ts.startTime && ts.endTime) {
+                    const now = new Date();
+                    const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                    if (ts.startTime <= ts.endTime) {
+                      isScheduleActive = time >= ts.startTime && time <= ts.endTime;
+                    } else {
+                      isScheduleActive = time >= ts.startTime || time <= ts.endTime;
+                    }
+                  }
+
+                  // Hack to highlight active level: scan recent logs for e.g. "L2 bet placed"
+                  const recentLog = [...logs].reverse().find(l => (l.msg || l.message || '').includes('bet placed'));
+                  const activeMatch = (recentLog?.msg || recentLog?.message || '').match(/L(\d+)/);
+                  const activeLvl = activeMatch ? parseInt(activeMatch[1], 10) : null;
+
+                  return (
+                    <div key={schedule.id || idx} className={`bg-slate-50 border shadow-sm rounded-xl overflow-hidden transition-all ${isScheduleActive ? 'border-indigo-400 ring-1 ring-indigo-400' : 'border-slate-200'}`}>
+                      <div className={`px-3 py-2 border-b flex justify-between items-center ${isScheduleActive ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-100/50 border-slate-200'}`}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-700 text-xs uppercase tracking-wider">Time Slot:</span>
+                          <span className="text-xs font-medium text-slate-900">{ts ? `${ts.name} (${ts.startTime}-${ts.endTime})` : 'Unknown'}</span>
+                        </div>
+                        {isScheduleActive && (
+                          <span className="bg-indigo-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-widest animate-pulse">Live</span>
+                        )}
+                      </div>
+                      <div className="px-3 py-3">
+                        <span className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-1.5 block">Strategy: <span className="text-amber-700 capitalize">{st ? st.name : 'Unknown'}</span></span>
+                        {st && (
+                          <div className="flex gap-1 flex-wrap mt-1">
+                            {st.levels?.map((lvlAmt: number, i: number) => {
+                              const isAct = (i + 1) === activeLvl;
+                              return (
+                                <span key={i} className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${isAct ? 'bg-amber-500 text-white border-amber-600 shadow-sm' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                  L{i + 1}: ₹{lvlAmt}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {(!bot.settings?.schedules || bot.settings.schedules.length === 0) && (
+                  <span className="col-span-full text-sm text-slate-500 italic p-3 bg-slate-50 border border-slate-200 border-dashed rounded-xl block text-center">No schedules active</span>
+                )}
+              </div>
             </div>
           </div>
         </div>

@@ -99,14 +99,38 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 h-screen overflow-y-auto relative">
+      <main className="flex-1 h-screen overflow-y-auto relative pb-20 md:pb-0">
         {/* Subtle top glare effect */}
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
         
-        <div className="p-8 max-w-7xl mx-auto relative z-10">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto relative z-10 pb-24 md:pb-8">
           {children}
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-200/50 z-50 flex justify-around items-center px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+        <Link to="/" className="flex flex-col items-center p-2 w-16" activeProps={{ className: "text-indigo-600 drop-shadow-sm" }} inactiveProps={{ className: "text-slate-400 hover:text-indigo-500" }}>
+          <LayoutDashboard className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-bold tracking-wide">Home</span>
+        </Link>
+        <Link to="/bots" className="flex flex-col items-center p-2 w-16" activeProps={{ className: "text-indigo-600 drop-shadow-sm" }} inactiveProps={{ className: "text-slate-400 hover:text-indigo-500" }}>
+          <Bot className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-bold tracking-wide">Bots</span>
+        </Link>
+        <Link to="/proxies" className="flex flex-col items-center p-2 w-16" activeProps={{ className: "text-indigo-600 drop-shadow-sm" }} inactiveProps={{ className: "text-slate-400 hover:text-indigo-500" }}>
+          <Server className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-bold tracking-wide">Proxies</span>
+        </Link>
+        <Link to="/strategies" className="flex flex-col items-center p-2 w-16" activeProps={{ className: "text-indigo-600 drop-shadow-sm" }} inactiveProps={{ className: "text-slate-400 hover:text-indigo-500" }}>
+          <Target className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-bold tracking-wide">Strategy</span>
+        </Link>
+        <button onClick={handleLogout} className="flex flex-col items-center p-2 w-16 text-slate-400 hover:text-red-500 transition-colors">
+          <LogOut className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-bold tracking-wide">Logout</span>
+        </button>
+      </nav>
     </div>
   );
 }

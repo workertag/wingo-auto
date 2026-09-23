@@ -288,13 +288,39 @@ class PlaywrightBot {
     }
   }
 
-  getBetQuantity(level) {
+  async getActiveStrategy() {
+    if (!this.settings || !this.settings.schedules || this.settings.schedules.length === 0) {
+      return null;
+    }
+    
+    // Fetch to ensure we have the latest
+    const timeSlots = await this.prisma.timeSlot.findMany();
+    const strategies = await this.prisma.strategy.findMany();
+    
+    const now = new Date();
+    const options = { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false };
+    const currentHHMM = new Intl.DateTimeFormat('en-GB', options).format(now);
+    
+    for (const schedule of this.settings.schedules) {
+      const ts = timeSlots.find(t => t.id === schedule.timeSlotId);
+      if (ts && currentHHMM >= ts.startTime && currentHHMM <= ts.endTime) {
+        return strategies.find(s => s.id === schedule.strategyId);
+      }
+    }
+    return null;
+  }
+
+  getBetQuantity(level, strategy) {
+    if (strategy && strategy.levels && strategy.levels.length >= level) {
+       const amt = strategy.levels[level - 1];
+       if (amt !== undefined && amt !== null && amt > 0) return amt;
+    }
     return 1 * Math.pow(2, (level || 1) - 1);
   }
 
-  async placeBet(selector, label, level, issue) {
+  async placeBet(selector, label, level, issue, strategy = null) {
     try {
-      const quantity = this.getBetQuantity(level);
+      const quantity = this.getBetQuantity(level, strategy);
       this.log(`  Clicking ${label} button (Level ${level}, Qty ${quantity})...`);
 
       const btn = this.page.locator(selector).first();
@@ -329,6 +355,17 @@ class PlaywrightBot {
       await this.page.waitForTimeout(400);
 
       this.log(`  ✅ ${label} L${level} bet placed — ₹${quantity}.00`);
+      
+      if (this.currentBalance !== null && this.currentBalance !== undefined) {
+        this.currentBalance -= quantity;
+        this.publishEvent('BALANCE_UPDATE', { balance: parseFloat(this.currentBalance.toFixed(2)) });
+        
+        this.prisma.botInstance.update({
+          where: { id: this.botId },
+          data: { currentBalance: parseFloat(this.currentBalance.toFixed(2)) }
+        }).catch(() => {});
+      }
+
       if (issue) {
         this.pendingBets.push({ issue, betType: label, betQuantity: quantity, level });
         
@@ -445,21 +482,38 @@ class PlaywrightBot {
       await this.page.waitForTimeout(delay);
       
       // 3. Place bet based on Strategy
-      // Since strategy settings from DB are complex, we will just use basic logic for now.
-      // If there's a Big/Small prediction, place it.
-      if (pending.bsPred) {
-        const selector = pending.bsPred === "BIG" ? ".Betting__C-foot-b" : ".Betting__C-foot-s";
-        await this.placeBet(selector, pending.bsPred, bsLevel, currentIssue);
+      const activeStrategy = await this.getActiveStrategy();
+      if (!activeStrategy) {
+         this.log(`⚠️ No active strategy schedule for current time. Skipping bet.`);
+         return;
       }
-      if (pending.rgPred) {
-        let selector;
-        switch (pending.rgPred) {
-          case "RED":    selector = ".Betting__C-head-red"; break;
-          case "GREEN":  selector = ".Betting__C-head-green"; break;
-          case "VIOLET": selector = ".Betting__C-head-violet"; break;
+
+      const games = this.settings.games || [];
+      const betBS = games.includes('B/S');
+      const betRG = games.includes('R/G');
+      
+      if (pending.bsPred && betBS) {
+        if (bsLevel >= activeStrategy.minLevel && bsLevel <= activeStrategy.maxLevel) {
+           const selector = pending.bsPred === "BIG" ? ".Betting__C-foot-b" : ".Betting__C-foot-s";
+           await this.placeBet(selector, pending.bsPred, bsLevel, currentIssue, activeStrategy);
+        } else {
+           this.log(`   🛑 Skipping BS bet — Level ${bsLevel} is outside Strategy limits [L${activeStrategy.minLevel} - L${activeStrategy.maxLevel}]`);
         }
-        if (selector) {
-           await this.placeBet(selector, pending.rgPred, rgLevel, currentIssue);
+      }
+      
+      if (pending.rgPred && betRG) {
+        if (rgLevel >= activeStrategy.minLevel && rgLevel <= activeStrategy.maxLevel) {
+           let selector;
+           switch (pending.rgPred) {
+             case "RED":    selector = ".Betting__C-head-red"; break;
+             case "GREEN":  selector = ".Betting__C-head-green"; break;
+             case "VIOLET": selector = ".Betting__C-head-violet"; break;
+           }
+           if (selector) {
+              await this.placeBet(selector, pending.rgPred, rgLevel, currentIssue, activeStrategy);
+           }
+        } else {
+           this.log(`   🛑 Skipping RG bet — Level ${rgLevel} is outside Strategy limits [L${activeStrategy.minLevel} - L${activeStrategy.maxLevel}]`);
         }
       }
       

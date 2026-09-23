@@ -42,7 +42,7 @@ function HistoryPage() {
   return (
     <AppLayout>
       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight">Bot Sessions History</h1>
           <p className="text-slate-500 mt-1 font-medium">Review past performance and automated trades.</p>
@@ -70,7 +70,7 @@ function HistoryPage() {
                   
                   return (
                     <div key={s.id} className="glass-card p-5 rounded-2xl group hover:-translate-y-1 transition-all duration-300">
-                      <div className="flex justify-between items-start mb-4">
+                      <div className="flex flex-wrap justify-between items-start gap-2 mb-4">
                         <div>
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                             s.status === 'ACTIVE' ? 'bg-indigo-100 text-indigo-600' :

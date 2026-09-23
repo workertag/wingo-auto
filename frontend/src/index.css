@@ -106,3 +106,14 @@
     @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-violet-500 to-emerald-400;
   }
 }
+
+@layer utilities {
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}

@@ -27,7 +27,7 @@ export function useBotStream() {
   const addEvent = useBotStreamStore(state => state.addEvent);
 
   useEffect(() => {
-    const eventSource = new EventSource('http://localhost:3001/api/stream');
+    const eventSource = new EventSource('/api/stream');
 
     eventSource.onmessage = (event) => {
       try {

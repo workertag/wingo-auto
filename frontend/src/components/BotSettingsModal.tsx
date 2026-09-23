@@ -60,6 +60,14 @@ export function BotSettingsModal({ bot, onClose }: { bot: any, onClose: () => vo
     setSchedules([...schedules, { id: Date.now().toString(), timeSlotId: '', strategyId: '' }]);
   };
 
+  const toggleSelection = (setter: any, currentList: string[], item: string) => {
+    if (currentList.includes(item)) {
+      setter(currentList.filter(i => i !== item));
+    } else {
+      setter([...currentList, item]);
+    }
+  };
+
   const removeSchedule = (id: string) => {
     setSchedules(schedules.filter(s => s.id !== id));
   };
@@ -73,7 +81,7 @@ export function BotSettingsModal({ bot, onClose }: { bot: any, onClose: () => vo
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+        <div className="p-6 border-b border-slate-100 flex flex-wrap gap-4 justify-between items-start sm:items-center">
           <div>
             <h2 className="text-xl font-bold text-slate-800">Bot Settings</h2>
             <p className="text-sm text-slate-500">{bot.name} Configuration</p>
@@ -103,7 +111,7 @@ export function BotSettingsModal({ bot, onClose }: { bot: any, onClose: () => vo
 
           {/* Schedules */}
           <div>
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
               <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">Schedules</h3>
               <button 
                 onClick={addSchedule}
@@ -164,8 +172,8 @@ export function BotSettingsModal({ bot, onClose }: { bot: any, onClose: () => vo
           </div>
         </div>
 
-        <div className="p-6 border-t border-slate-100 flex justify-end space-x-3 bg-slate-50/50">
-          <button onClick={onClose} className="px-5 py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 transition-colors">
+        <div className="p-6 border-t border-slate-100 flex flex-col-reverse sm:flex-row justify-end gap-3 bg-slate-50/50">
+          <button onClick={onClose} className="px-5 py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 transition-colors w-full sm:w-auto">
             Cancel
           </button>
           <button 
