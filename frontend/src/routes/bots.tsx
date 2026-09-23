@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bot, Plus, Settings, Play, Square, Activity, IndianRupee, ShieldCheck, TrendingUp, Wifi, Trash2, Search, MoreVertical, BarChart2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { AppLayout } from '../components/Layout';
 import { BotSettingsModal } from '../components/BotSettingsModal';
@@ -21,6 +21,27 @@ function BotsPage() {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'running' | 'stopped'>('all');
+
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getUptimeString = (bot: any) => {
+    if (bot.status !== 'RUNNING') return '-';
+    const startedAt = bot.settings?.startedAt || (bot.updatedAt ? new Date(bot.updatedAt).getTime() : Date.now());
+    
+    const diff = Math.floor((now - startedAt) / 60000);
+    if (diff < 0) return '< 1m';
+    if (diff < 1) return '< 1m';
+    
+    const hours = Math.floor(diff / 60);
+    const mins = diff % 60;
+    
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+  };
 
   const { data: bots = [], isLoading } = useQuery({
     queryKey: ['bots'],
@@ -306,7 +327,7 @@ function BotsPage() {
                   <div>
                     <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Uptime</p>
                     <p className="text-lg font-black text-slate-800">
-                      {bot.status === 'RUNNING' ? '1h 24m' : '-'}
+                      {getUptimeString(bot)}
                     </p>
                   </div>
                 </div>

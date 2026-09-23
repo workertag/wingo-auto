@@ -111,7 +111,15 @@ class PlaywrightBot {
       this.sub.on('message', this.onMessageListener);
       
       this.publishEvent('BOT_STARTED', { status: 'RUNNING' });
-      await this.prisma.botInstance.update({ where: { id: this.botId }, data: { status: 'RUNNING' } });
+      this.settings = this.settings || {};
+      this.settings.startedAt = Date.now();
+      await this.prisma.botInstance.update({ 
+        where: { id: this.botId }, 
+        data: { 
+          status: 'RUNNING',
+          settings: this.settings 
+        } 
+      });
 
     } catch (err) {
       this.log(`Error starting bot: ${err.message}`);
