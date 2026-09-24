@@ -31,6 +31,7 @@ class PlaywrightBot {
 
     this.isRunning = false;
     this.pendingBets = [];
+    this.betLocks = new Set();
     this.sessionWins = 0;
     this.sessionLosses = 0;
     
@@ -484,6 +485,23 @@ class PlaywrightBot {
       if (!currentIssue || !pending) return;
       if (this.isDepositing) return;
 
+      const games = this.settings.games || [];
+      const betBS = games.includes('B/S');
+      const betRG = games.includes('R/G');
+      
+      const lockKeyBS = `${currentIssue}-BS`;
+      const lockKeyRG = `${currentIssue}-RG`;
+      
+      const alreadyBetBS = this.pendingBets.some(b => b.issue === currentIssue && ["BIG", "SMALL"].includes(b.betType)) || this.betLocks.has(lockKeyBS);
+      const alreadyBetRG = this.pendingBets.some(b => b.issue === currentIssue && ["RED", "GREEN", "VIOLET"].includes(b.betType)) || this.betLocks.has(lockKeyRG);
+      
+      if ((!betBS || alreadyBetBS || !pending.bsPred) && (!betRG || alreadyBetRG || !pending.rgPred)) {
+         return;
+      }
+
+      if (betBS && pending.bsPred && !alreadyBetBS) this.betLocks.add(lockKeyBS);
+      if (betRG && pending.rgPred && !alreadyBetRG) this.betLocks.add(lockKeyRG);
+
       // 2. Add randomized jitter between 500ms and 2500ms to avoid exact sync with other bots
       const delay = Math.floor(Math.random() * 2000) + 500;
       this.log(`Waiting ${delay}ms before placing bet...`);
@@ -493,23 +511,22 @@ class PlaywrightBot {
       const activeStrategy = await this.getActiveStrategy();
       if (!activeStrategy) {
          this.log(`⚠️ No active strategy schedule for current time. Skipping bet.`);
+         this.betLocks.delete(lockKeyBS);
+         this.betLocks.delete(lockKeyRG);
          return;
       }
-
-      const games = this.settings.games || [];
-      const betBS = games.includes('B/S');
-      const betRG = games.includes('R/G');
       
-      if (pending.bsPred && betBS) {
+      if (pending.bsPred && betBS && !alreadyBetBS) {
         if (bsLevel >= activeStrategy.minLevel && bsLevel <= activeStrategy.maxLevel) {
            const selector = pending.bsPred === "BIG" ? ".Betting__C-foot-b" : ".Betting__C-foot-s";
-           await this.placeBet(selector, pending.bsPred, bsLevel, currentIssue, activeStrategy);
+           const success = await this.placeBet(selector, pending.bsPred, bsLevel, currentIssue, activeStrategy);
+           if (!success) this.betLocks.delete(lockKeyBS);
         } else {
            this.log(`   🛑 Skipping BS bet — Level ${bsLevel} is outside Strategy limits [L${activeStrategy.minLevel} - L${activeStrategy.maxLevel}]`);
         }
       }
       
-      if (pending.rgPred && betRG) {
+      if (pending.rgPred && betRG && !alreadyBetRG) {
         if (rgLevel >= activeStrategy.minLevel && rgLevel <= activeStrategy.maxLevel) {
            let selector;
            switch (pending.rgPred) {
@@ -518,7 +535,8 @@ class PlaywrightBot {
              case "VIOLET": selector = ".Betting__C-head-violet"; break;
            }
            if (selector) {
-              await this.placeBet(selector, pending.rgPred, rgLevel, currentIssue, activeStrategy);
+              const success = await this.placeBet(selector, pending.rgPred, rgLevel, currentIssue, activeStrategy);
+              if (!success) this.betLocks.delete(lockKeyRG);
            }
         } else {
            this.log(`   🛑 Skipping RG bet — Level ${rgLevel} is outside Strategy limits [L${activeStrategy.minLevel} - L${activeStrategy.maxLevel}]`);
