@@ -44,6 +44,9 @@ function ProxiesPage() {
       setShowAddModal(false);
       setEditingId(null);
       setNewProxy({ name: '', host: '', port: '', proxyUser: '', proxyPass: '' });
+    },
+    onError: (error: any) => {
+      alert(error.message);
     }
   });
 
@@ -62,6 +65,9 @@ function ProxiesPage() {
       setShowAddModal(false);
       setEditingId(null);
       setNewProxy({ name: '', host: '', port: '', proxyUser: '', proxyPass: '' });
+    },
+    onError: (error: any) => {
+      alert(error.message);
     }
   });
 
@@ -338,10 +344,14 @@ function ProxiesPage() {
               </button>
               <button
                 onClick={() => {
+                  const payload = {
+                    ...newProxy,
+                    port: parseInt(newProxy.port, 10)
+                  };
                   if (editingId) {
-                    updateProxyMutation.mutate({ ...newProxy });
+                    updateProxyMutation.mutate(payload);
                   } else {
-                    addProxyMutation.mutate({ ...newProxy, userId: '1' });
+                    addProxyMutation.mutate({ ...payload, userId: '1' });
                   }
                 }}
                 className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl shadow-lg shadow-indigo-500/30 transition-colors"
