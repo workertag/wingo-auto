@@ -30,9 +30,14 @@ export function ServerHealthWidget() {
 
   const { cpu, memory, os } = health;
   
-  const memUsedGB = (memory.used / (1024 ** 3)).toFixed(2);
+  // Calculate "used" memory like btop (Total - Available)
+  // If available is not provided by the API yet, fallback to active memory or total-free.
+  const actualAvailable = memory.available || memory.free;
+  const actualUsed = memory.total - actualAvailable;
+  
+  const memUsedGB = (actualUsed / (1024 ** 3)).toFixed(2);
   const memTotalGB = (memory.total / (1024 ** 3)).toFixed(2);
-  const memUsagePercent = Math.round((memory.used / memory.total) * 100);
+  const memUsagePercent = Math.round((actualUsed / memory.total) * 100);
   
   const cpuUsagePercent = Math.round(cpu.utilization || 0);
 
@@ -100,7 +105,7 @@ export function ServerHealthWidget() {
           <div className="text-xs text-slate-500 space-y-1 font-medium">
             <div className="flex justify-between"><span>Used</span><span className="text-slate-700">{memUsedGB} GB</span></div>
             <div className="flex justify-between"><span>Total</span><span className="text-slate-700">{memTotalGB} GB</span></div>
-            <div className="flex justify-between"><span>Free</span><span className="text-slate-700">{((memory.free || memory.total - memory.used) / (1024 ** 3)).toFixed(2)} GB</span></div>
+            <div className="flex justify-between"><span>Available</span><span className="text-slate-700">{(actualAvailable / (1024 ** 3)).toFixed(2)} GB</span></div>
           </div>
         </div>
 

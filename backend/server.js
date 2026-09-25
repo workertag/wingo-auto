@@ -298,7 +298,8 @@ app.get('/api/system/health', authenticateToken, async (req, res) => {
         total: mem.total,
         free: mem.free,
         used: mem.used,
-        active: mem.active
+        active: mem.active,
+        available: mem.available
       },
       os: {
         platform: osInfo.platform,
