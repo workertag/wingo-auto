@@ -231,21 +231,21 @@ function ProxiesPage() {
                 </div>
                 
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-slate-500">Host : Port</span>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm font-bold text-slate-800">{proxy.host}:{proxy.port}</span>
-                      <button onClick={() => copyToClipboard(`${proxy.host}:${proxy.port}`)} className="text-slate-400 hover:text-indigo-500 transition-colors">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-sm font-semibold text-slate-500 shrink-0">Host : Port</span>
+                    <div className="flex items-center space-x-2 overflow-hidden">
+                      <span className="text-sm font-bold text-slate-800 truncate" title={`${proxy.host}:${proxy.port}`}>{proxy.host}:{proxy.port}</span>
+                      <button onClick={() => copyToClipboard(`${proxy.host}:${proxy.port}`)} className="text-slate-400 hover:text-indigo-500 transition-colors shrink-0">
                         <Copy className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
                   {proxy.proxyUser && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-500">Auth</span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-bold text-slate-800">{proxy.proxyUser}:***</span>
-                        <button onClick={() => copyToClipboard(`${proxy.proxyUser}:${proxy.proxyPass}`)} className="text-slate-400 hover:text-indigo-500 transition-colors">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-sm font-semibold text-slate-500 shrink-0">Auth</span>
+                      <div className="flex items-center space-x-2 overflow-hidden">
+                        <span className="text-sm font-bold text-slate-800 truncate" title={`${proxy.proxyUser}:***`}>{proxy.proxyUser}:***</span>
+                        <button onClick={() => copyToClipboard(`${proxy.proxyUser}:${proxy.proxyPass}`)} className="text-slate-400 hover:text-indigo-500 transition-colors shrink-0">
                           <Copy className="w-4 h-4" />
                         </button>
                       </div>

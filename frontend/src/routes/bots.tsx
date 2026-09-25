@@ -444,7 +444,7 @@ function BotsPage() {
                   className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
                 >
                   <option value="">-- No Proxy (Direct) --</option>
-                  {endpoints.map((ep: any) => (
+                  {endpoints.filter((ep: any) => !bots.some((b: any) => b.endpointId === ep.id)).map((ep: any) => (
                     <option key={ep.id} value={ep.id}>{ep.name} ({ep.host})</option>
                   ))}
                 </select>
