@@ -274,6 +274,45 @@ app.delete('/api/endpoints/:id', authenticateToken, async (req, res) => {
   res.json({ success: true });
 });
 
+const si = require('systeminformation');
+
+// --- SYSTEM HEALTH ---
+app.get('/api/system/health', authenticateToken, async (req, res) => {
+  try {
+    const [cpu, mem, osInfo, currentLoad] = await Promise.all([
+      si.cpu(),
+      si.mem(),
+      si.osInfo(),
+      si.currentLoad()
+    ]);
+    
+    res.json({
+      cpu: {
+        manufacturer: cpu.manufacturer,
+        brand: cpu.brand,
+        cores: cpu.cores,
+        speed: cpu.speed,
+        utilization: currentLoad.currentLoad
+      },
+      memory: {
+        total: mem.total,
+        free: mem.free,
+        used: mem.used,
+        active: mem.active
+      },
+      os: {
+        platform: osInfo.platform,
+        distro: osInfo.distro,
+        release: osInfo.release,
+        uptime: si.time().uptime
+      },
+      timestamp: Date.now()
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch system metrics' });
+  }
+});
+
 const server = app.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`);
 });

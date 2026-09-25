@@ -121,5 +121,10 @@ export const api = {
   },
   deleteStrategy(id: string) {
     return this.request(`/strategies/${id}`, { method: 'DELETE' });
+  },
+
+  // System Health
+  getSystemHealth() {
+    return this.request('/system/health');
   }
 };

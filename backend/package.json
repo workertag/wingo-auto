@@ -19,7 +19,8 @@
     "express": "^5.2.1",
     "https-proxy-agent": "^9.1.0",
     "ioredis": "^6.0.0",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "systeminformation": "^5.33.13"
   },
   "devDependencies": {
     "prisma": "5"
