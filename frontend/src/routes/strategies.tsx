@@ -308,9 +308,11 @@ function StrategiesPage() {
             </div>
           ) : (
             filteredStrategies.map(st => {
-              const actualLevels = st.levels.map((amt: number, i: number) => ({ amt, level: i + 1 })).filter((l: any) => l.amt > 0);
-              const displayMin = actualLevels.length > 0 ? actualLevels[0].level : (st.minLevel || 1);
-              const displayMax = actualLevels.length > 0 ? actualLevels[actualLevels.length - 1].level : (st.maxLevel || st.levels.length);
+              const displayMin = st.minLevel || 1;
+              const displayMax = st.maxLevel || st.levels.length;
+              const actualLevels = st.levels
+                .map((amt: number, i: number) => ({ amt, level: i + 1 }))
+                .filter((l: any) => l.level >= displayMin && l.level <= displayMax && l.amt > 0);
               const totalAmountRequired = actualLevels.reduce((a: number, b: any) => a + b.amt, 0);
 
               return (
