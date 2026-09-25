@@ -1,6 +1,6 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useAuthStore } from '../stores/authStore';
-import { LayoutDashboard, Clock, Target, LogOut, History, Bot, Server } from 'lucide-react';
+import { LayoutDashboard, Clock, Target, LogOut, History, Bot, Server, Activity } from 'lucide-react';
 import React from 'react';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -53,6 +53,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <Server className="w-5 h-5" />
             <span>Proxies & Endpoints</span>
+          </Link>
+          <Link
+            to="/server"
+            className="flex items-center space-x-3 px-4 py-3 rounded-2xl transition-all duration-300 border border-transparent"
+            activeProps={{ className: "bg-white/80 shadow-md shadow-indigo-500/10 text-indigo-600 font-semibold border-white" }}
+            inactiveProps={{ className: "hover:bg-white/40 hover:text-indigo-700" }}
+          >
+            <Activity className="w-5 h-5" />
+            <span>Server Health</span>
           </Link>
 
           <div className="pt-4 pb-1">
@@ -121,6 +130,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <Link to="/proxies" className="flex flex-col items-center p-2 w-16" activeProps={{ className: "text-indigo-600 drop-shadow-sm" }} inactiveProps={{ className: "text-slate-400 hover:text-indigo-500" }}>
           <Server className="w-6 h-6 mb-1" />
           <span className="text-[10px] font-bold tracking-wide">Proxies</span>
+        </Link>
+        <Link to="/server" className="flex flex-col items-center p-2 w-16" activeProps={{ className: "text-indigo-600 drop-shadow-sm" }} inactiveProps={{ className: "text-slate-400 hover:text-indigo-500" }}>
+          <Activity className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-bold tracking-wide">Server</span>
         </Link>
         <Link to="/strategies" className="flex flex-col items-center p-2 w-16" activeProps={{ className: "text-indigo-600 drop-shadow-sm" }} inactiveProps={{ className: "text-slate-400 hover:text-indigo-500" }}>
           <Target className="w-6 h-6 mb-1" />

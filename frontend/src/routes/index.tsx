@@ -5,7 +5,6 @@ import { useBotStream, useBotStreamStore } from '../hooks/useBotStream';
 import { api } from '../lib/api';
 import { AppLayout } from '../components/Layout';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { ServerHealthWidget } from '../components/ServerHealthWidget';
 
 export const Route = createFileRoute('/')({
   component: DashboardOverview,
@@ -379,10 +378,6 @@ function DashboardOverview() {
             </div>
           </div>
         </div>
-
-        {/* Server Health */}
-        <ServerHealthWidget />
-
       </div>
     </AppLayout>
   );
