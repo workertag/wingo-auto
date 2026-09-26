@@ -140,6 +140,26 @@ app.get('/api/bots/:id', authenticateToken, async (req, res) => {
   }
 });
 
+app.put('/api/bots/:id', authenticateToken, async (req, res) => {
+  try {
+    const { name, endpointId, wingoPhone, wingoPassword } = req.body;
+    
+    let updateData = { name, endpointId: endpointId || null, wingoPhone };
+    if (wingoPassword) {
+      updateData.wingoPasswordAuth = encrypt(wingoPassword);
+    }
+    
+    const bot = await prisma.botInstance.update({
+      where: { id: req.params.id },
+      data: updateData
+    });
+    res.json(bot);
+  } catch (err) {
+    console.error('Error updating bot:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.put('/api/bots/:id/settings', authenticateToken, async (req, res) => {
   try {
     const { settings } = req.body;

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bot, Plus, Settings, Play, Square, Activity, IndianRupee, ShieldCheck, TrendingUp, Wifi, Trash2, Search, MoreVertical, BarChart2 } from 'lucide-react';
+import { Bot, Plus, Settings, Play, Square, Activity, IndianRupee, ShieldCheck, TrendingUp, Wifi, Trash2, Search, MoreVertical, BarChart2, Pencil } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { AppLayout } from '../components/Layout';
@@ -18,6 +18,7 @@ function BotsPage() {
   const [selectedBotForSettings, setSelectedBotForSettings] = useState<any>(null);
   const [loadingBots, setLoadingBots] = useState<Record<string, boolean>>({});
   const [newBot, setNewBot] = useState({ name: '', wingoPhone: '', wingoPassword: '', endpointId: '' });
+  const [editingBot, setEditingBot] = useState<any>(null);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'running' | 'stopped'>('all');
@@ -76,6 +77,23 @@ function BotsPage() {
       queryClient.invalidateQueries({ queryKey: ['bots'] });
       setShowAddModal(false);
       setNewBot({ name: '', wingoPhone: '', wingoPassword: '', endpointId: '' });
+    },
+    onError: (error: any) => {
+      alert(error.message);
+    }
+  });
+
+  const editBotMutation = useMutation({
+    mutationFn: async (botData: any) => {
+      const res = await api.request(`/bots/${botData.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(botData)
+      });
+      return res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bots'] });
+      setEditingBot(null);
     },
     onError: (error: any) => {
       alert(error.message);
@@ -292,7 +310,23 @@ function BotsPage() {
                       </span>
                     </div>
                     
-                    <div className="relative group/menu">
+                    <div className="flex items-center">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingBot({
+                            id: bot.id,
+                            name: bot.name || '',
+                            wingoPhone: bot.wingoPhone || '',
+                            wingoPassword: '',
+                            endpointId: bot.endpointId || ''
+                          });
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors mr-1"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
@@ -464,6 +498,79 @@ function BotsPage() {
                 disabled={addBotMutation.isPending}
               >
                 {addBotMutation.isPending ? 'Creating...' : 'Create Instance'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Bot Modal */}
+      {editingBot && (
+        <div className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-white/20 animate-in zoom-in-95 duration-200">
+            <h2 className="text-2xl font-bold text-slate-800 mb-6">Edit Bot Instance</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Instance Name</label>
+                <input
+                  type="text"
+                  value={editingBot.name}
+                  onChange={e => setEditingBot({...editingBot, name: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                  placeholder="e.g. Bot 001 - VIP"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Wingo Phone Number</label>
+                <input
+                  type="text"
+                  value={editingBot.wingoPhone}
+                  onChange={e => setEditingBot({...editingBot, wingoPhone: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                  placeholder="9876543210"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Wingo Password (Leave blank to keep unchanged)</label>
+                <input
+                  type="password"
+                  value={editingBot.wingoPassword}
+                  onChange={e => setEditingBot({...editingBot, wingoPassword: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Assign Proxy (Optional)</label>
+                <select
+                  value={editingBot.endpointId}
+                  onChange={e => setEditingBot({...editingBot, endpointId: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                >
+                  <option value="">-- No Proxy (Direct) --</option>
+                  {endpoints.filter((ep: any) => !bots.some((b: any) => b.endpointId === ep.id && b.id !== editingBot.id)).map((ep: any) => (
+                    <option key={ep.id} value={ep.id}>{ep.name} ({ep.host})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex space-x-3 mt-8">
+              <button
+                onClick={() => setEditingBot(null)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => editBotMutation.mutate(editingBot)}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl shadow-lg shadow-indigo-500/30 transition-colors"
+                disabled={editBotMutation.isPending}
+              >
+                {editBotMutation.isPending ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>
