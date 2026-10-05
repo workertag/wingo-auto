@@ -85,21 +85,37 @@ class PlaywrightBot {
       };
       
       if (this.endpoint && this.endpoint.isActive) {
-        let proxyServer = `http://${this.endpoint.host}:${this.endpoint.port}`;
-        contextOptions.proxy = {
-          server: proxyServer,
-          username: this.endpoint.proxyUser || undefined,
-          password: this.endpoint.proxyPass || undefined
-        };
-        this.log(`Using proxy: ${proxyServer}`);
+        if (this.endpoint.type === 'TAILSCALE') {
+          this.log(`Using Tailscale exit node (${this.endpoint.tailscaleExitNodeIP}). No Playwright proxy needed.`);
+          this.browser = await chromium.launch(launchOptions);
+          this.context = await this.browser.newContext(contextOptions);
+          this.page = await this.context.newPage();
+          this.playwrightContext = this.context;
+        } else {
+          let proxyServer = `http://${this.endpoint.host}:${this.endpoint.port}`;
+          contextOptions.proxy = {
+            server: proxyServer,
+            username: this.endpoint.proxyUser || undefined,
+            password: this.endpoint.proxyPass || undefined
+          };
+          this.log(`Using proxy: ${proxyServer}`);
+          this.browser = await chromium.launch(launchOptions);
+          this.context = await this.browser.newContext(contextOptions);
+          this.page = await this.context.newPage();
+          this.playwrightContext = this.context;
+        }
       } else {
         this.log("No proxy configured. Using direct connection.");
+        this.browser = await chromium.launch(launchOptions);
+        this.context = await this.browser.newContext(contextOptions);
+        this.page = await this.context.newPage();
+        this.playwrightContext = this.context;
       }
 
-      this.browser = await chromium.launch(launchOptions);
-      this.context = await this.browser.newContext(contextOptions);
-      this.page = await this.context.newPage();
-      this.playwrightContext = this.context;
+      this.log("Verifying IP address...");
+      await this.page.goto("https://api.ipify.org", { waitUntil: "domcontentloaded" }).catch(()=>{});
+      const currentIp = await this.page.evaluate(() => document.body.innerText).catch(()=>"unknown");
+      this.log(`My Current Bot IP is: ${currentIp.trim()}`);
 
       await this.login();
 

@@ -1,7 +1,7 @@
 const { Worker } = require('bullmq');
 const Redis = require('ioredis');
 const { PrismaClient } = require('@prisma/client');
-const PlaywrightBot = require('./playwright-bot');
+const ContainerManager = require('./container-manager');
 const { connection } = require('./queue');
 
 const prisma = new PrismaClient();
@@ -22,7 +22,6 @@ const worker = new Worker('bot-commands', async job => {
       return;
     }
     
-    // Lock it immediately to prevent race conditions
     activeBots.set(botId, 'STARTING');
     
     const botInstance = await prisma.botInstance.findUnique({
@@ -34,51 +33,60 @@ const worker = new Worker('bot-commands', async job => {
       activeBots.delete(botId);
       throw new Error(`BotInstance ${botId} not found`);
     }
-
-    console.log(`Starting bot ${botId}...`);
-    const bot = new PlaywrightBot(botInstance, redisSubscriber, redisPublisher, prisma);
-    activeBots.set(botId, bot);
     
-    // Run asynchronously
-    bot.start()
-      .catch(err => console.error(`Bot ${botId} crashed:`, err))
-      .finally(() => {
-        // If it stopped or crashed, remove from active memory
-        if (!bot.isRunning) {
-          activeBots.delete(botId);
-        }
+    const endpoint = botInstance.endpoint;
+    
+    // We can still support regular proxies for testing without containers,
+    // but the target is Tailscale via containers.
+    if (!endpoint || endpoint.type !== 'TAILSCALE') {
+       console.warn(`Bot ${botId} does not have a TAILSCALE endpoint. The container might start but not use a specific exit node.`);
+    }
+
+    console.log(`Starting container for bot ${botId}...`);
+    try {
+      const containerId = ContainerManager.start({
+        botId,
+        tailscaleAuthKey: endpoint?.tailscaleAuthKey || '',
+        exitNodeIP: endpoint?.tailscaleExitNodeIP || '',
+        redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+        databaseUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/wingo_automation'
       });
+      
+      activeBots.set(botId, containerId); // store containerId instead of object
+      await prisma.botInstance.update({
+        where: { id: botId },
+        data: { status: 'RUNNING', containerId }
+      });
+    } catch (e) {
+      console.error(`Failed to start container for bot ${botId}`, e);
+      activeBots.delete(botId);
+    }
   }
   
   if (action === 'STOP_BOT') {
-    const bot = activeBots.get(botId);
-    if (bot) {
-      console.log(`Stopping bot ${botId}...`);
-      await bot.stop();
-      activeBots.delete(botId);
-    } else {
-      console.log(`Bot ${botId} not found on this worker. Forcing DB status to STOPPED.`);
-      await prisma.botInstance.update({
-        where: { id: botId },
-        data: { status: 'STOPPED' }
-      }).catch(() => {});
-    }
+    console.log(`Stopping container for bot ${botId}...`);
+    ContainerManager.stop(botId);
+    activeBots.delete(botId);
+    
+    await prisma.botInstance.update({
+      where: { id: botId },
+      data: { status: 'STOPPED', containerId: null }
+    }).catch(() => {});
   }
 
   if (action === 'UPDATE_SETTINGS') {
-    const bot = activeBots.get(botId);
-    if (bot && typeof bot !== 'string') {
-      console.log(`Updating settings dynamically for running bot ${botId}...`);
-      bot.settings = job.data.settings;
-    }
+    console.log(`Forwarding UPDATE_SETTINGS to container ${botId}...`);
+    redisPublisher.publish(`bot:${botId}:commands`, JSON.stringify({
+      action: 'UPDATE_SETTINGS',
+      settings: job.data.settings
+    }));
   }
 
   if (action === 'CANCEL_DEPOSIT') {
-    const bot = activeBots.get(botId);
-    if (bot && typeof bot !== 'string') {
-      console.log(`Cancelling deposit flow for bot ${botId}...`);
-      bot.cancelDepositFlag = true;
-    }
+    console.log(`Forwarding CANCEL_DEPOSIT to container ${botId}...`);
+    redisPublisher.publish(`bot:${botId}:commands`, JSON.stringify({
+      action: 'CANCEL_DEPOSIT'
+    }));
   }
 }, { connection });
 

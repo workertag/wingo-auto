@@ -1,0 +1,24 @@
+FROM mcr.microsoft.com/playwright:v1.40.0-jammy
+
+# Install Tailscale
+RUN curl -fsSL https://tailscale.com/install.sh | sh
+
+# Create app directory
+WORKDIR /app
+
+# Copy bot code
+COPY backend/playwright-bot.js ./
+COPY backend/crypto.js ./
+COPY backend/package.json ./
+COPY backend/prisma ./prisma/
+
+# Install Node.js dependencies
+RUN npm install --omit=dev && npx prisma generate
+
+# Copy the entrypoint script and runner
+COPY container/entrypoint.sh /entrypoint.sh
+COPY container/container-bot-runner.js /app/container-bot-runner.js
+
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

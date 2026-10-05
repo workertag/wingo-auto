@@ -479,7 +479,7 @@ function BotsPage() {
                 >
                   <option value="">-- No Proxy (Direct) --</option>
                   {endpoints.filter((ep: any) => !bots.some((b: any) => b.endpointId === ep.id)).map((ep: any) => (
-                    <option key={ep.id} value={ep.id}>{ep.name} ({ep.host})</option>
+                    <option key={ep.id} value={ep.id}>{ep.name} ({ep.type === 'TAILSCALE' ? 'Tailscale' : ep.host})</option>
                   ))}
                 </select>
               </div>
@@ -552,7 +552,7 @@ function BotsPage() {
                 >
                   <option value="">-- No Proxy (Direct) --</option>
                   {endpoints.filter((ep: any) => !bots.some((b: any) => b.endpointId === ep.id && b.id !== editingBot.id)).map((ep: any) => (
-                    <option key={ep.id} value={ep.id}>{ep.name} ({ep.host})</option>
+                    <option key={ep.id} value={ep.id}>{ep.name} ({ep.type === 'TAILSCALE' ? 'Tailscale' : ep.host})</option>
                   ))}
                 </select>
               </div>

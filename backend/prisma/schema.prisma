@@ -22,15 +22,19 @@ model NetworkEndpoint {
   id        String        @id @default(uuid())
   userId    String
   user      User          @relation(fields: [userId], references: [id])
-  name      String
-  host      String
-  port      Int
-  proxyUser String?
-  proxyPass String?
-  isActive  Boolean       @default(true)
-  bots      BotInstance[]
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  name                  String
+  type                  String        @default("PROXY")  // "PROXY" | "TAILSCALE"
+  host                  String
+  port                  Int
+  proxyUser             String?
+  proxyPass             String?
+  tailscaleExitNodeIP   String?       // e.g. "100.64.0.5"
+  tailscaleExitNodeName String?       // friendly name, e.g. "sourav-pixel-7"
+  tailscaleAuthKey      String?       // Ephemeral auth key for this exit node connection
+  isActive              Boolean       @default(true)
+  bots                  BotInstance[]
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 }
 
 model BotInstance {
@@ -44,6 +48,8 @@ model BotInstance {
   wingoEmail        String?
   wingoPasswordAuth String           // Encrypted
   status            String           @default("STOPPED") // STOPPED, RUNNING, CRASHED
+  containerId       String?          // Podman container ID when running
+  containerWorker   String?          // Which worker server is running this container
   settings          Json?            // { games: [], timeSlots: [], strategies: [] }
   currentBalance    Float            @default(0)
   sessionWins       Int              @default(0)

@@ -14,7 +14,7 @@ function ProxiesPage() {
   const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [newProxy, setNewProxy] = useState({ name: '', host: '', port: '', proxyUser: '', proxyPass: '' });
+  const [newProxy, setNewProxy] = useState({ name: '', type: 'PROXY', host: '', port: '', proxyUser: '', proxyPass: '', tailscaleExitNodeIP: '', tailscaleExitNodeName: '', tailscaleAuthKey: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
@@ -43,7 +43,7 @@ function ProxiesPage() {
       queryClient.invalidateQueries({ queryKey: ['endpoints'] });
       setShowAddModal(false);
       setEditingId(null);
-      setNewProxy({ name: '', host: '', port: '', proxyUser: '', proxyPass: '' });
+      setNewProxy({ name: '', type: 'PROXY', host: '', port: '', proxyUser: '', proxyPass: '', tailscaleExitNodeIP: '', tailscaleExitNodeName: '', tailscaleAuthKey: '' });
     },
     onError: (error: any) => {
       alert(error.message);
@@ -64,7 +64,7 @@ function ProxiesPage() {
       queryClient.invalidateQueries({ queryKey: ['endpoints'] });
       setShowAddModal(false);
       setEditingId(null);
-      setNewProxy({ name: '', host: '', port: '', proxyUser: '', proxyPass: '' });
+      setNewProxy({ name: '', type: 'PROXY', host: '', port: '', proxyUser: '', proxyPass: '', tailscaleExitNodeIP: '', tailscaleExitNodeName: '', tailscaleAuthKey: '' });
     },
     onError: (error: any) => {
       alert(error.message);
@@ -73,11 +73,15 @@ function ProxiesPage() {
 
   const handleEdit = (proxy: any) => {
     setNewProxy({
-      name: proxy.name,
-      host: proxy.host,
-      port: proxy.port.toString(),
+      name: proxy.name || '',
+      type: proxy.type || 'PROXY',
+      host: proxy.host || '',
+      port: proxy.port ? proxy.port.toString() : '',
       proxyUser: proxy.proxyUser || '',
-      proxyPass: proxy.proxyPass || ''
+      proxyPass: proxy.proxyPass || '',
+      tailscaleExitNodeIP: proxy.tailscaleExitNodeIP || '',
+      tailscaleExitNodeName: proxy.tailscaleExitNodeName || '',
+      tailscaleAuthKey: proxy.tailscaleAuthKey || ''
     });
     setEditingId(proxy.id);
     setShowAddModal(true);
@@ -128,7 +132,7 @@ function ProxiesPage() {
           <button
             onClick={() => {
               setEditingId(null);
-              setNewProxy({ name: '', host: '', port: '', proxyUser: '', proxyPass: '' });
+              setNewProxy({ name: '', type: 'PROXY', host: '', port: '', proxyUser: '', proxyPass: '', tailscaleExitNodeIP: '', tailscaleExitNodeName: '', tailscaleAuthKey: '' });
               setShowAddModal(true);
             }}
             className="flex items-center space-x-2 bg-indigo-500 hover:bg-indigo-600 text-white px-5 py-2.5 rounded-xl transition-all duration-300 shadow-lg shadow-indigo-500/25 font-semibold text-sm"
@@ -232,24 +236,48 @@ function ProxiesPage() {
                 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm font-semibold text-slate-500 shrink-0">Host : Port</span>
-                    <div className="flex items-center space-x-2 overflow-hidden">
-                      <span className="text-sm font-bold text-slate-800 truncate" title={`${proxy.host}:${proxy.port}`}>{proxy.host}:{proxy.port}</span>
-                      <button onClick={() => copyToClipboard(`${proxy.host}:${proxy.port}`)} className="text-slate-400 hover:text-indigo-500 transition-colors shrink-0">
-                        <Copy className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <span className="text-sm font-semibold text-slate-500 shrink-0">Type</span>
+                    <span className="text-sm font-bold text-slate-800">{proxy.type === 'TAILSCALE' ? 'Tailscale Exit Node' : 'HTTP Proxy'}</span>
                   </div>
-                  {proxy.proxyUser && (
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-sm font-semibold text-slate-500 shrink-0">Auth</span>
-                      <div className="flex items-center space-x-2 overflow-hidden">
-                        <span className="text-sm font-bold text-slate-800 truncate" title={`${proxy.proxyUser}:***`}>{proxy.proxyUser}:***</span>
-                        <button onClick={() => copyToClipboard(`${proxy.proxyUser}:${proxy.proxyPass}`)} className="text-slate-400 hover:text-indigo-500 transition-colors shrink-0">
-                          <Copy className="w-4 h-4" />
-                        </button>
+                  {proxy.type === 'TAILSCALE' ? (
+                    <>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm font-semibold text-slate-500 shrink-0">Exit Node IP</span>
+                        <div className="flex items-center space-x-2 overflow-hidden">
+                          <span className="text-sm font-bold text-slate-800 truncate" title={proxy.tailscaleExitNodeIP}>{proxy.tailscaleExitNodeIP || 'N/A'}</span>
+                          <button onClick={() => copyToClipboard(proxy.tailscaleExitNodeIP)} className="text-slate-400 hover:text-indigo-500 transition-colors shrink-0">
+                            <Copy className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm font-semibold text-slate-500 shrink-0">Node Name</span>
+                        <span className="text-sm font-bold text-slate-800">{proxy.tailscaleExitNodeName || 'N/A'}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm font-semibold text-slate-500 shrink-0">Host : Port</span>
+                        <div className="flex items-center space-x-2 overflow-hidden">
+                          <span className="text-sm font-bold text-slate-800 truncate" title={`${proxy.host}:${proxy.port}`}>{proxy.host}:{proxy.port}</span>
+                          <button onClick={() => copyToClipboard(`${proxy.host}:${proxy.port}`)} className="text-slate-400 hover:text-indigo-500 transition-colors shrink-0">
+                            <Copy className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      {proxy.proxyUser && (
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-sm font-semibold text-slate-500 shrink-0">Auth</span>
+                          <div className="flex items-center space-x-2 overflow-hidden">
+                            <span className="text-sm font-bold text-slate-800 truncate" title={`${proxy.proxyUser}:***`}>{proxy.proxyUser}:***</span>
+                            <button onClick={() => copyToClipboard(`${proxy.proxyUser}:${proxy.proxyPass}`)} className="text-slate-400 hover:text-indigo-500 transition-colors shrink-0">
+                              <Copy className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -283,6 +311,21 @@ function ProxiesPage() {
             <h2 className="text-2xl font-bold text-slate-800 mb-6">{editingId ? 'Edit Proxy' : 'Add New Proxy'}</h2>
             
             <div className="space-y-4">
+              <div className="flex gap-2 p-1 bg-slate-100 rounded-xl mb-4">
+                <button
+                  onClick={() => setNewProxy({ ...newProxy, type: 'PROXY' })}
+                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${newProxy.type === 'PROXY' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  HTTP Proxy
+                </button>
+                <button
+                  onClick={() => setNewProxy({ ...newProxy, type: 'TAILSCALE' })}
+                  className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${newProxy.type === 'TAILSCALE' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Tailscale Exit Node
+                </button>
+              </div>
+
               <div>
                 <label className="block text-sm font-semibold text-slate-600 mb-1.5">Proxy Name</label>
                 <input
@@ -293,46 +336,84 @@ function ProxiesPage() {
                   placeholder="e.g. US Residential 1"
                 />
               </div>
-              <div className="flex flex-col sm:flex-row gap-4 sm:space-x-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Host / IP</label>
-                  <input
-                    type="text"
-                    value={newProxy.host}
-                    onChange={e => setNewProxy({...newProxy, host: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
-                    placeholder="192.168.1.1"
-                  />
-                </div>
-                <div className="w-full sm:w-24">
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Port</label>
-                  <input
-                    type="text"
-                    value={newProxy.port}
-                    onChange={e => setNewProxy({...newProxy, port: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
-                    placeholder="8080"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Username (Optional)</label>
-                <input
-                  type="text"
-                  value={newProxy.proxyUser}
-                  onChange={e => setNewProxy({...newProxy, proxyUser: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Password (Optional)</label>
-                <input
-                  type="password"
-                  value={newProxy.proxyPass}
-                  onChange={e => setNewProxy({...newProxy, proxyPass: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
-                />
-              </div>
+
+              {newProxy.type === 'PROXY' ? (
+                <>
+                  <div className="flex flex-col sm:flex-row gap-4 sm:space-x-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-slate-600 mb-1.5">Host / IP</label>
+                      <input
+                        type="text"
+                        value={newProxy.host}
+                        onChange={e => setNewProxy({...newProxy, host: e.target.value})}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                        placeholder="192.168.1.1"
+                      />
+                    </div>
+                    <div className="w-full sm:w-24">
+                      <label className="block text-sm font-semibold text-slate-600 mb-1.5">Port</label>
+                      <input
+                        type="text"
+                        value={newProxy.port}
+                        onChange={e => setNewProxy({...newProxy, port: e.target.value})}
+                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                        placeholder="8080"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Username (Optional)</label>
+                    <input
+                      type="text"
+                      value={newProxy.proxyUser}
+                      onChange={e => setNewProxy({...newProxy, proxyUser: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Password (Optional)</label>
+                    <input
+                      type="password"
+                      value={newProxy.proxyPass}
+                      onChange={e => setNewProxy({...newProxy, proxyPass: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Exit Node IP</label>
+                    <input
+                      type="text"
+                      value={newProxy.tailscaleExitNodeIP}
+                      onChange={e => setNewProxy({...newProxy, tailscaleExitNodeIP: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                      placeholder="e.g. 100.64.0.5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Tailscale Auth Key</label>
+                    <input
+                      type="password"
+                      value={newProxy.tailscaleAuthKey}
+                      onChange={e => setNewProxy({...newProxy, tailscaleAuthKey: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                      placeholder="tskey-auth-..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Device Name (Optional)</label>
+                    <input
+                      type="text"
+                      value={newProxy.tailscaleExitNodeName}
+                      onChange={e => setNewProxy({...newProxy, tailscaleExitNodeName: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-indigo-500/50 outline-none transition-all"
+                      placeholder="e.g. sourav-pixel-7"
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex space-x-3 mt-8">
@@ -344,10 +425,13 @@ function ProxiesPage() {
               </button>
               <button
                 onClick={() => {
-                  const payload = {
-                    ...newProxy,
-                    port: parseInt(newProxy.port, 10)
-                  };
+                  let payload: any = { ...newProxy };
+                  if (payload.type === 'TAILSCALE') {
+                    payload.host = 'tailscale';
+                    payload.port = 1055; // Dummy values to satisfy schema constraints
+                  } else {
+                    payload.port = parseInt(payload.port, 10) || 0;
+                  }
                   if (editingId) {
                     updateProxyMutation.mutate(payload);
                   } else {
